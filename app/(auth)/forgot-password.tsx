@@ -18,7 +18,7 @@ export default function ForgotPasswordScreen() {
 
     const handleSendLink = () => {
         // Handle reset link logic
-        console.log("Sending reset link to:", email);
+        router.push("/(auth)/otp-verification");
     };
 
     return (

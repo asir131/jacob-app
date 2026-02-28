@@ -11,6 +11,7 @@ export default function RootLayout() {
       <Stack.Screen name="(auth)/login" />
       <Stack.Screen name="(auth)/location-access" />
       <Stack.Screen name="(auth)/forgot-password" />
+      <Stack.Screen name="(auth)/otp-verification" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="index" />
     </Stack>
