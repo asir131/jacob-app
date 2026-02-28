@@ -81,7 +81,7 @@ export default function CategoriesPage() {
                             <View key={item.id} className="w-[33.33%] items-center mb-12">
                                 <TouchableOpacity
                                     style={{ backgroundColor: item.bgColor }}
-                                    className="w-[84px] h-[84px] rounded-full items-center justify-center mb-4"
+                                    className="w-[58px] h-[58px] rounded-full items-center justify-center mb-4"
                                 >
                                     {item.type === 'Ionicons' ? (
                                         <Ionicons name={item.icon as any} size={36} color={item.iconColor} />

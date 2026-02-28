@@ -151,21 +151,21 @@ export default function HomePage() {
         {/* Categories */}
         <View className="px-6 mb-12 flex-row justify-between items-center">
           <View className="items-center">
-            <TouchableOpacity className="w-[72px] h-[72px] rounded-full bg-[#FFDFB3] items-center justify-center mb-3">
+            <TouchableOpacity className="w-[58px] h-[58px] rounded-full bg-[#FFDFB3] items-center justify-center mb-3">
               <Ionicons name="snow" size={32} color="#C46000" />
             </TouchableOpacity>
             <Text className="text-[14px] font-semibold text-[#4A5568]">AC Repair</Text>
           </View>
 
           <View className="items-center">
-            <TouchableOpacity className="w-[72px] h-[72px] rounded-full bg-[#DCCFFD] items-center justify-center mb-3">
+            <TouchableOpacity className="w-[58px] h-[58px] rounded-full bg-[#DCCFFD] items-center justify-center mb-3">
               <Ionicons name="sparkles" size={30} color="#553098" />
             </TouchableOpacity>
             <Text className="text-[14px] font-semibold text-[#4A5568]">Beauty</Text>
           </View>
 
           <View className="items-center">
-            <TouchableOpacity className="w-[72px] h-[72px] rounded-full bg-[#B1EBF2] items-center justify-center mb-3">
+            <TouchableOpacity className="w-[58px] h-[58px] rounded-full bg-[#B1EBF2] items-center justify-center mb-3">
               <Ionicons name="cube" size={30} color="#008EA6" />
             </TouchableOpacity>
             <Text className="text-[14px] font-semibold text-[#4A5568]">Appliance</Text>
@@ -174,7 +174,7 @@ export default function HomePage() {
           <View className="items-center">
             <TouchableOpacity
               onPress={() => router.push('/categories')}
-              className="w-[72px] h-[72px] rounded-full bg-gray-50 border border-gray-100 items-center justify-center mb-3"
+              className="w-[58px] h-[58px] rounded-full bg-gray-50 border border-gray-100 items-center justify-center mb-3"
             >
               <Ionicons name="arrow-forward" size={26} color="#718096" />
             </TouchableOpacity>

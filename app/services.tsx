@@ -41,7 +41,10 @@ export default function ServicesPage() {
     const { title } = useLocalSearchParams();
 
     const renderServiceCard = ({ item }: { item: typeof SERVICES_DATA[0] }) => (
-        <TouchableOpacity className="mb-8 px-6">
+        <TouchableOpacity
+            onPress={() => router.push({ pathname: '/service-details', params: { provider: item.provider, price: item.price } })}
+            className="mb-8 px-6"
+        >
             <View className="relative w-full h-[220px] rounded-[24px] overflow-hidden mb-4">
                 <Image source={{ uri: item.image }} className="w-full h-full" resizeMode="cover" />
                 {/* Pagination Dots Mockup */}
