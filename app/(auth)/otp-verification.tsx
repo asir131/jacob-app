@@ -57,7 +57,7 @@ export default function OTPVerificationScreen() {
     const handleContinue = () => {
         // Handle OTP verification logic
         console.log("OTP entered:", otp.join(""));
-        router.push("/(tabs)");
+        router.push("/(auth)/otp-success");
     };
 
     return (
