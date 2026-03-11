@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Dimensions, Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
-const { width } = Dimensions.get('window');
+
 
 const PHOTOS = [
     "https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=400&auto=format&fit=crop",
@@ -138,8 +138,8 @@ export default function ServiceDetailsPage() {
                         </View>
                         <View className="flex-1">
                             <View className="flex-1 mb-2">
-                                <View className="flex-row flex-1">
-                                    <View className="flex-1 pr-2">
+                                <View className="flex-row flex-1 gap-2">
+                                    <View className="flex-1">
                                         <View className="flex-1 mb-2">
                                             <Image source={{ uri: PHOTOS[1] }} className="w-full h-full rounded-[20px]" />
                                         </View>

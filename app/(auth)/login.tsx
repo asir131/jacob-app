@@ -1,6 +1,6 @@
 import ImageImport from "@/assets/ImageImport";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
     const router = useRouter();
+    const { role } = useLocalSearchParams();
     const [userId, setUserId] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -24,7 +25,11 @@ export default function LoginScreen() {
 
     const handleSignIn = () => {
         // Handle sign in logic
-        router.push("/(auth)/location-access");
+        if (role === 'provider') {
+            router.push("/(provider-setup)/wizard");
+        } else {
+            router.push("/(auth)/location-access");
+        }
     };
 
     return (
@@ -145,9 +150,9 @@ export default function LoginScreen() {
                         {/* Footer */}
                         <View className="flex-row justify-center mt-8">
                             <Text className="text-[#7C8B95] font-medium">
-                                Don't have an account?{" "}
+                                Don&apos;t have an account?{" "}
                             </Text>
-                            <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
+                            <TouchableOpacity onPress={() => router.push(role === 'provider' ? "/(auth)/provider-register" : "/(auth)/register")}>
                                 <Text className="text-[#2B84B1] font-bold">Sign Up</Text>
                             </TouchableOpacity>
                         </View>

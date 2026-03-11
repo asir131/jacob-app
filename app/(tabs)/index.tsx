@@ -47,6 +47,14 @@ export default function HomePage() {
               />
             </View>
           </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('/notifications')}
+            className="w-10 h-10 rounded-full bg-gray-50 items-center justify-center border border-gray-100 ml-4 relative"
+          >
+            <Ionicons name="notifications-outline" size={22} color="#1A2C42" />
+            <View className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-[#FF4757] border-2 border-white" />
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 

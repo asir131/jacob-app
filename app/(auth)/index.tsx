@@ -82,7 +82,7 @@ export default function AuthIndex() {
 
             <Text className="text-[18px] font-bold text-[#1A2C42] mb-4">4. Disclaimers</Text>
             <Text className="text-[15px] leading-[22px] text-[#7C8B95] font-medium mb-12">
-                The service is provided on an "as is" and "as available" basis. [Your Company Name] makes no warranties, expressed or implied, regarding the operation.
+                The service is provided on an &quot;as is&quot; and &quot;as available&quot; basis. [Your Company Name] makes no warranties, expressed or implied, regarding the operation.
             </Text>
         </>
     );

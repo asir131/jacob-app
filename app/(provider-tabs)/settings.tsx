@@ -1,0 +1,107 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { Image, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+export default function ProviderSettings() {
+    const router = useRouter();
+    const [available, setAvailable] = useState(true);
+
+    const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null }: any) => (
+        <TouchableOpacity
+            className="flex-row items-center py-4 bg-white"
+            activeOpacity={type === 'switch' ? 1 : 0.7}
+            onPress={() => {
+                if (type === 'switch' && onChange) {
+                    onChange(!value);
+                } else if (route) {
+                    router.push(route);
+                }
+            }}
+        >
+            <View className={`w-10 h-10 rounded-xl items-center justify-center mr-4 ${isDestructive ? 'bg-red-50' : 'bg-[#EAF3FA]'}`}>
+                <Ionicons name={icon} size={22} color={isDestructive ? '#FF4757' : color} />
+            </View>
+            <Text className={`flex-1 text-[16px] font-semibold ${isDestructive ? 'text-[#FF4757]' : 'text-[#1A2C42]'}`}>
+                {label}
+            </Text>
+            {value && <Text className="text-[14px] font-medium text-[#7C8B95] mr-3">{value}</Text>}
+            {type === 'chevron' && !isDestructive && (
+                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+            )}
+            {type === 'switch' && (
+                <Switch
+                    value={value as boolean}
+                    onValueChange={onChange}
+                    trackColor={{ false: '#E2E8F0', true: '#2B84B1' }}
+                    thumbColor={'#FFFFFF'}
+                />
+            )}
+        </TouchableOpacity>
+    );
+
+    return (
+        <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={['top']}>
+            <View className="px-6 py-4 bg-white shadow-sm shadow-black/5 z-10 w-full mb-2">
+                <Text className="text-[24px] font-bold text-[#1A2C42]">Settings</Text>
+            </View>
+
+            <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+                {/* Profile Widget */}
+                <View className="bg-white rounded-[24px] p-5 mb-8 border border-gray-100 shadow-sm shadow-gray-100 flex-row items-center">
+                    <Image source={{ uri: "https://i.pravatar.cc/150?u=joyboy" }} className="w-16 h-16 rounded-full mr-4 bg-gray-100" />
+                    <View className="flex-1">
+                        <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">Joyboy Pro</Text>
+                        <Text className="text-[14px] text-[#7C8B95] font-medium">Level 2 Seller</Text>
+                    </View>
+                    <TouchableOpacity className="bg-[#EAF3FA] w-10 h-10 rounded-full items-center justify-center">
+                        <Ionicons name="pencil" size={18} color="#2B84B1" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Seller Controls */}
+                <View className="mb-8">
+                    <Text className="text-[13px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-3 ml-1">
+                        Seller Controls
+                    </Text>
+                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
+                        <SettingsRow icon="radio-button-on" label="Available for Work" type="switch" value={available} onChange={setAvailable} color="#2B84B1" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="wallet-outline" label="Earnings & Billing" color="#2B84B1" route="/(provider)/earnings" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="analytics-outline" label="Seller Analytics" color="#2B84B1" route="/(provider)/analytics" />
+                    </View>
+                </View>
+
+                {/* Account Settings */}
+                <View className="mb-8">
+                    <Text className="text-[13px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-3 ml-1">
+                        General Settings
+                    </Text>
+                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
+                        <SettingsRow icon="person-outline" label="Personal Information" color="#2B84B1" route="/(profile)/personal-info" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="notifications-outline" label="Notification Preferences" color="#2B84B1" />
+                    </View>
+                </View>
+
+                {/* Support */}
+                <View className="mb-8">
+                    <Text className="text-[13px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-3 ml-1">
+                        Support
+                    </Text>
+                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
+                        <SettingsRow icon="help-buoy-outline" label="Help & Support" color="#2B84B1" route="/(provider)/support" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="document-text-outline" label="Seller Guidelines" color="#2B84B1" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="log-out-outline" label="Log Out" isDestructive={true} />
+                    </View>
+                </View>
+            </ScrollView>
+        </SafeAreaView>
+    );
+}

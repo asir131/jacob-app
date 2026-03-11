@@ -1,4 +1,5 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -47,6 +48,7 @@ const BOOKINGS_DATA: Booking[] = [
 ];
 
 export default function BookingPage() {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState('Upcoming');
 
     // For demonstration: if tab is 'Upcoming', show data. Others show empty.
@@ -78,7 +80,27 @@ export default function BookingPage() {
             {hasData ? (
                 <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
                     {BOOKINGS_DATA.map((item) => (
-                        <View key={item.id} className="mb-8 border border-[#F2F2F2] rounded-[24px] overflow-hidden">
+                        <TouchableOpacity
+                            key={item.id}
+                            activeOpacity={0.8}
+                            onPress={() => router.push({
+                                pathname: '/booking-details',
+                                params: {
+                                    id: item.id,
+                                    title: item.title,
+                                    refCode: item.refCode,
+                                    status: item.status,
+                                    time: item.time,
+                                    date: item.date,
+                                    provider: item.provider,
+                                    providerIcon: item.providerIcon,
+                                    icon: item.icon,
+                                    iconBg: item.iconBg,
+                                    iconColor: item.iconColor
+                                }
+                            })}
+                            className="mb-8 border border-[#F2F2F2] rounded-[24px] overflow-hidden"
+                        >
                             {/* Card Content */}
                             <View className="p-5">
                                 {/* Header Section */}
@@ -130,13 +152,13 @@ export default function BookingPage() {
                                             <Text className="text-[13px] text-[#7C8B95] mt-0.5">Service provider</Text>
                                         </View>
                                     </View>
-                                    <TouchableOpacity className="bg-[#2286BE] flex-row items-center px-6 py-3 rounded-2xl">
+                                    <View className="bg-[#2286BE] flex-row items-center px-6 py-3 rounded-2xl">
                                         <Ionicons name="call" size={18} color="white" />
                                         <Text className="text-white font-bold text-[14px] ml-2">Call</Text>
-                                    </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
-                        </View>
+                        </TouchableOpacity>
                     ))}
                     <View className="h-20" />
                 </ScrollView>
@@ -157,7 +179,7 @@ export default function BookingPage() {
                         No Upcoming Order
                     </Text>
                     <Text className="text-[15px] text-[#7C8B95] text-center leading-[22px] mb-10">
-                        Currently you don't have any upcoming order. Place and track your orders from here.
+                        Currently you don&apos;t have any upcoming order. Place and track your orders from here.
                     </Text>
 
                     <TouchableOpacity className="bg-[#2286BE] px-10 py-5 rounded-[20px] w-full">

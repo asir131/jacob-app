@@ -33,8 +33,8 @@ export default function TabLayout() {
             }}>
                 <Tabs.Screen name="index" options={{ title: "", tabBarIcon: ({ focused }) => <Ionicons name="home-outline" size={24} color={focused ? "#2286BE" : "#999"} /> }} />
                 <Tabs.Screen name="booking" options={{ title: "", tabBarIcon: ({ focused }) => <Foundation name="page-copy" size={24} color={focused ? "#2286BE" : "#999"} /> }} />
-                <Tabs.Screen name="notification" options={{ title: "", tabBarIcon: ({ focused }) => <Ionicons name="notifications-outline" size={24} color={focused ? "#2286BE" : "#999"} /> }} />
                 <Tabs.Screen name="message" options={{ title: "", tabBarIcon: ({ focused }) => <MaterialCommunityIcons name="message-text-outline" size={24} color={focused ? "#2286BE" : "#999"} /> }} />
+                <Tabs.Screen name="settings" options={{ title: "", tabBarIcon: ({ focused }) => <Ionicons name="settings-outline" size={24} color={focused ? "#2286BE" : "#999"} /> }} />
             </Tabs>
         </>
     );

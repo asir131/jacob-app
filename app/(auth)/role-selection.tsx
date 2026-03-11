@@ -28,7 +28,7 @@ export default function RoleSelection() {
         setSelectedRole(id);
         // Navigate to next screen after selection
         setTimeout(() => {
-            router.push('/(auth)/login');
+            router.push({ pathname: '/(auth)/login', params: { role: id } });
         }, 300);
     };
 

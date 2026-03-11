@@ -1,8 +1,31 @@
+import { FontAwesome5, Foundation, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { Stack } from "expo-router";
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import "../global.css";
 
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const [loaded, error] = useFonts({
+    ...Ionicons.font,
+    ...MaterialCommunityIcons.font,
+    ...FontAwesome5.font,
+    ...Foundation.font,
+  });
+
+  useEffect(() => {
+    if (loaded || error) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded, error]);
+
+  if (!loaded && !error) {
+    return null;
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)/index" />
@@ -17,6 +40,7 @@ export default function RootLayout() {
       <Stack.Screen name="(auth)/reset-success" />
       <Stack.Screen name="(auth)/register" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="notifications" options={{ presentation: 'modal' }} />
       <Stack.Screen name="index" />
     </Stack>
   );

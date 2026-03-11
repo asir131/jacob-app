@@ -18,23 +18,6 @@ const CATEGORIES = [
 export default function CategoriesPage() {
     const router = useRouter();
 
-    const renderItem = ({ item }: { item: typeof CATEGORIES[0] }) => (
-        <View className="flex-1 items-center mb-10 px-2">
-            <TouchableOpacity
-                style={{ backgroundColor: item.bgColor }}
-                className="w-[84px] h-[84px] rounded-full items-center justify-center mb-4 shadow-sm"
-            >
-                {item.type === 'Ionicons' ? (
-                    <Ionicons name={item.icon as any} size={36} color={item.iconColor} />
-                ) : (
-                    <MaterialCommunityIcons name={item.icon as any} size={36} color={item.iconColor} />
-                )}
-            </TouchableOpacity>
-            <Text className="text-[15px] font-bold text-[#4A5568] text-center">
-                {item.name}
-            </Text>
-        </View>
-    );
 
     return (
         <SafeAreaView className="flex-1 bg-white" edges={['top']}>
