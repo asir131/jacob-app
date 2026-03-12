@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function SellerDashboard() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
 
     const StatCard = ({ icon, label, value, color, trend = null, isPositive = true }: any) => (
         <View className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm shadow-gray-100 flex-1 mr-3 mb-4">
@@ -75,7 +77,7 @@ export default function SellerDashboard() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
 
                 {/* Advanced Earnings Card */}
                 <View className="bg-[#1A2C42] rounded-[32px] p-6 mb-8 shadow-xl shadow-[#1A2C42]/30 overflow-hidden relative">

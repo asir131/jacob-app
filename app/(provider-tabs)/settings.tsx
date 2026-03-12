@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ProviderSettings() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [available, setAvailable] = useState(true);
 
     const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null }: any) => (
@@ -47,7 +49,7 @@ export default function ProviderSettings() {
                 <Text className="text-[24px] font-bold text-[#1A2C42]">Settings</Text>
             </View>
 
-            <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
                 {/* Profile Widget */}
                 <View className="bg-white rounded-[24px] p-5 mb-8 border border-gray-100 shadow-sm shadow-gray-100 flex-row items-center">
                     <Image source={{ uri: "https://i.pravatar.cc/150?u=joyboy" }} className="w-16 h-16 rounded-full mr-4 bg-gray-100" />

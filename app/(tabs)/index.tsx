@@ -2,16 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   Image,
+  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomePage() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
+
   return (
     <View className="flex-1 bg-white">
       {/* Fixed Header */}
@@ -62,7 +66,7 @@ export default function HomePage() {
       <ScrollView
         className="flex-1 bg-[#FAFCFD]"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 60 }}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
         bounces={true}
       >
         {/* Reduced spacer - was 110, now 80 → less gap */}

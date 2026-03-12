@@ -1,8 +1,8 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Booking {
     id: string;
@@ -49,6 +49,8 @@ const BOOKINGS_DATA: Booking[] = [
 
 export default function BookingPage() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [activeTab, setActiveTab] = useState('Upcoming');
 
     // For demonstration: if tab is 'Upcoming', show data. Others show empty.
@@ -78,7 +80,7 @@ export default function BookingPage() {
             </View>
 
             {hasData ? (
-                <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+                <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
                     {BOOKINGS_DATA.map((item) => (
                         <TouchableOpacity
                             key={item.id}
@@ -160,10 +162,10 @@ export default function BookingPage() {
                             </View>
                         </TouchableOpacity>
                     ))}
-                    <View className="h-20" />
+                    <View className="h-4" />
                 </ScrollView>
             ) : (
-                <View className="flex-1 items-center justify-center px-10 pb-20">
+                <View className="flex-1 items-center justify-center px-10" style={{ paddingBottom: tabBarHeight + 20 }}>
                     {/* Empty State Illustration Placeholder */}
                     <View className="mb-8">
                         {/* Custom Clipboard SVG representation using icons */}

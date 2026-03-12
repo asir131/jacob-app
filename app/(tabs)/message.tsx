@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { FlatList, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { FlatList, Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ChatItem {
     id: string;
@@ -73,6 +73,8 @@ const CHAT_DATA: ChatItem[] = [
 
 export default function MessagePage() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [activeTab, setActiveTab] = useState('All');
 
     const renderChatItem = ({ item }: { item: ChatItem }) => (
@@ -92,18 +94,20 @@ export default function MessagePage() {
                     <Image source={{ uri: item.avatar }} className="w-full h-full" />
                 </View>
                 {item.isOnline && (
-                    <View style={{ borderRadius: "100%" }} className="absolute bottom-0 right-0 w-4 h-4 bg-[#34A853] border-2 border-white" />
+                    <View style={{ borderRadius: 999 }} className="absolute bottom-0 right-0 w-4 h-4 bg-[#34A853] border-2 border-white" />
                 )}
             </View>
 
             <View className="flex-1 ml-4 justify-center">
                 <View className="flex-row justify-between items-center mb-1">
-                    <Text className="text-[17px] font-bold text-[#2286BE]">{item.name}</Text>
+                    <View className="flex-1 mr-2">
+                        <Text className="text-[17px] font-bold text-[#2286BE]" numberOfLines={1}>{item.name}</Text>
+                    </View>
                     <Text className="text-[13px] text-[#7C8B95] font-medium">{item.time}</Text>
                 </View>
-
+                
                 <View className="flex-row justify-between items-center">
-                    <Text className="text-[15px] text-[#7C8B95] font-medium">{item.info}</Text>
+                    <Text className="text-[15px] text-[#7C8B95] font-medium flex-1 mr-2" numberOfLines={1}>{item.info}</Text>
                     {item.unreadCount > 0 && (
                         <View className="bg-[#2286BE] w-5 h-5 rounded-full items-center justify-center">
                             <Text className="text-white text-[11px] font-bold">{item.unreadCount}</Text>
@@ -118,6 +122,7 @@ export default function MessagePage() {
         <View className="flex-1 bg-white">
             {/* Header with Search */}
             <SafeAreaView
+                edges={['top']}
                 style={{
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 4 },
@@ -126,7 +131,7 @@ export default function MessagePage() {
                     elevation: 3,
                     zIndex: 20,
                 }}
-                className="bg-white rounded-b-[40px] px-6 pb-8 pt-2"
+                className="bg-white rounded-b-[40px] px-6 pb-6"
             >
                 <View
                     style={{
@@ -181,7 +186,7 @@ export default function MessagePage() {
                 keyExtractor={(item) => item.id}
                 renderItem={renderChatItem}
                 ItemSeparatorComponent={() => <View className="h-[1px] bg-[#F2F2F2] mx-6" />}
-                contentContainerStyle={{ paddingBottom: 100 }}
+                contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
                 showsVerticalScrollIndicator={false}
             />
         </View>
