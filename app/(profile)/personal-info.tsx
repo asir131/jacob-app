@@ -1,19 +1,92 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
-import { Image, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React from 'react';
+import { Alert, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PersonalInfoPage() {
     const router = useRouter();
+    const [personalInfo, setPersonalInfo] = React.useState({
+        fullName: 'Joyboy',
+        email: 'hello@joyboy.dev',
+        phone: '+1 (555) 123-4567',
+        dateOfBirth: '12 June, 1995',
+        avatar: 'https://i.pravatar.cc/150?u=joyboy',
+        gender: 'male' as 'male' | 'female',
+    });
+    const [loading, setLoading] = React.useState(false);
 
-    const InputRow = ({ label, value, icon, keyboardType = 'default' }: any) => (
+    // Avatar Picker
+    const pickImage = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'We need access to your photo library to update your avatar.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            updateField('avatar', result.assets[0].uri);
+        }
+    };
+
+    // Form Validation
+    const validateForm = (): boolean => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+
+        if (!personalInfo.fullName.trim()) {
+            Alert.alert('Validation Error', 'Full name is required.');
+            return false;
+        }
+
+        if (!emailRegex.test(personalInfo.email)) {
+            Alert.alert('Validation Error', 'Please enter a valid email address.');
+            return false;
+        }
+
+        if (!phoneRegex.test(personalInfo.phone.replace(/[\s\-\(\)]/g, ''))) {
+            Alert.alert('Validation Error', 'Please enter a valid phone number.');
+            return false;
+        }
+
+        return true;
+    };
+
+    // Save Function
+    const handleSave = async () => {
+        if (!validateForm()) return;
+
+        setLoading(true);
+        // Simulate API call
+        setTimeout(() => {
+            setLoading(false);
+            Alert.alert('Success', 'Your personal information has been updated!', [
+                { text: 'OK', onPress: () => router.back() }
+            ]);
+        }, 2000);
+    };
+
+    const updateField = (field: string, value: string) => {
+        setPersonalInfo({ ...personalInfo, [field]: value });
+    };
+
+    const InputRow = ({ label, value, icon, keyboardType = 'default', field }: any) => (
         <View className="mb-5">
             <Text className="text-[14px] font-bold text-[#7C8B95] mb-2 ml-1">{label}</Text>
             <View className="flex-row items-center bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm shadow-gray-100">
                 <Ionicons name={icon} size={20} color="#A0AEC0" />
                 <TextInput
                     className="flex-1 ml-3 text-[16px] font-semibold text-[#1A2C42]"
-                    defaultValue={value}
+                    value={value}
+                    onChangeText={(text) => updateField(field, text)}
                     keyboardType={keyboardType}
                 />
             </View>
@@ -34,8 +107,8 @@ export default function PersonalInfoPage() {
                 {/* Avatar Section */}
                 <View className="items-center mb-8">
                     <View className="relative">
-                        <Image source={{ uri: "https://i.pravatar.cc/150?u=joyboy" }} className="w-24 h-24 rounded-full bg-gray-200" />
-                        <TouchableOpacity className="absolute bottom-0 right-0 w-8 h-8 bg-[#2B84B1] rounded-full flex items-center justify-center border-2 border-white">
+                        <Image source={{ uri: personalInfo.avatar }} className="w-24 h-24 rounded-full bg-gray-200" />
+                        <TouchableOpacity onPress={pickImage} className="absolute bottom-0 right-0 w-8 h-8 bg-[#2B84B1] rounded-full flex items-center justify-center border-2 border-white">
                             <Ionicons name="camera" size={14} color="white" />
                         </TouchableOpacity>
                     </View>
@@ -63,8 +136,19 @@ export default function PersonalInfoPage() {
 
             {/* Save Button */}
             <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100">
-                <TouchableOpacity className="bg-[#2B84B1] w-full py-5 rounded-[18px] items-center shadow-lg shadow-[#2B84B1]/30">
-                    <Text className="text-white font-bold text-[17px]">Save Changes</Text>
+                <TouchableOpacity
+                    onPress={handleSave}
+                    disabled={loading}
+                    className="bg-[#2B84B1] w-full py-5 rounded-[18px] items-center shadow-lg shadow-[#2B84B1]/30 flex-row justify-center"
+                >
+                    {loading ? (
+                        <React.Fragment>
+                            <View className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2 animate-spin" />
+                            <Text className="text-white font-bold text-[17px]">Saving...</Text>
+                        </React.Fragment>
+                    ) : (
+                        <Text className="text-white font-bold text-[17px]">Save Changes</Text>
+                    )}
                 </TouchableOpacity>
             </View>
         </SafeAreaView>

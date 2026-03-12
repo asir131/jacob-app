@@ -84,7 +84,7 @@ export default function ProviderSettings() {
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="notifications-outline" label="Notification Preferences" color="#2B84B1" />
+                        <SettingsRow icon="notifications-outline" label="Notification Preferences" color="#2B84B1" route="/(profile)/notifications" />
                     </View>
                 </View>
 
@@ -96,7 +96,7 @@ export default function ProviderSettings() {
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
                         <SettingsRow icon="help-buoy-outline" label="Help & Support" color="#2B84B1" route="/(provider)/support" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="document-text-outline" label="Seller Guidelines" color="#2B84B1" />
+                        <SettingsRow icon="document-text-outline" label="Seller Guidelines" color="#2B84B1" route="/(provider)/seller-guidelines" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="log-out-outline" label="Log Out" isDestructive={true} />
                     </View>

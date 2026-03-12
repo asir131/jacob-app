@@ -1,81 +1,189 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { FlatList, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+interface ChatItem {
+    id: string;
+    name: string;
+    info: string;
+    time: string;
+    unreadCount: number;
+    avatar: string;
+    isOnline: boolean;
+}
+
+const CHAT_DATA: ChatItem[] = [
+    {
+        id: '1',
+        name: 'Dianne Russell',
+        info: '(209) 555-0104',
+        time: '9:30 am',
+        unreadCount: 1,
+        avatar: "https://i.pravatar.cc/150?u=dianne",
+        isOnline: true,
+    },
+    {
+        id: '2',
+        name: 'Marvin McKinney',
+        info: '(302) 555-0107',
+        time: '9:30 am',
+        unreadCount: 1,
+        avatar: "https://i.pravatar.cc/150?u=marvin",
+        isOnline: true,
+    },
+    {
+        id: '3',
+        name: 'Bessie Cooper',
+        info: '(808) 555-0111',
+        time: '9:30 am',
+        unreadCount: 1,
+        avatar: "https://i.pravatar.cc/150?u=bessie",
+        isOnline: true,
+    },
+    {
+        id: '4',
+        name: 'Esther Howard',
+        info: '(505) 555-0125',
+        time: '9:30 am',
+        unreadCount: 1,
+        avatar: "https://i.pravatar.cc/150?u=esther",
+        isOnline: true,
+    },
+    {
+        id: '5',
+        name: 'Eleanor Pena',
+        info: '(229) 555-0109',
+        time: '9:30 am',
+        unreadCount: 0,
+        avatar: "https://i.pravatar.cc/150?u=eleanor",
+        isOnline: false,
+    },
+    {
+        id: '6',
+        name: 'Kristin Watson',
+        info: '(201) 555-0124',
+        time: '9:30 am',
+        unreadCount: 0,
+        avatar: "https://i.pravatar.cc/150?u=kristin",
+        isOnline: false,
+    }
+];
+
 export default function ProviderMessages() {
-    const ChatRow = ({ name, message, time, unread = 0, online = false }: any) => (
-        <TouchableOpacity className="flex-row items-center py-4 border-b border-gray-100 bg-white">
-            <View className="relative w-14 h-14 rounded-full bg-gray-100 mr-4 border border-gray-200 items-center justify-center">
-                <Ionicons name="person" size={24} color="#A0AEC0" />
-                {online && <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#55A06F] rounded-full border-2 border-white" />}
+    const router = useRouter();
+    const [activeTab, setActiveTab] = useState('All');
+
+    const renderChatItem = ({ item }: { item: ChatItem }) => (
+        <TouchableOpacity
+            onPress={() => router.push({
+                pathname: '/chat-details',
+                params: {
+                    name: item.name,
+                    avatar: item.avatar,
+                    info: item.info
+                }
+            })}
+            className="flex-row items-center px-6 py-4"
+        >
+            <View className="relative">
+                <View className="w-[60px] h-[60px] rounded-full overflow-hidden border-2 border-[#EAF3FA]">
+                    <Image source={{ uri: item.avatar }} className="w-full h-full" />
+                </View>
+                {item.isOnline && (
+                    <View style={{ borderRadius: "100%" }} className="absolute bottom-0 right-0 w-4 h-4 bg-[#34A853] border-2 border-white" />
+                )}
             </View>
-            <View className="flex-1">
+
+            <View className="flex-1 ml-4 justify-center">
                 <View className="flex-row justify-between items-center mb-1">
-                    <Text className="text-[16px] font-bold text-[#1A2C42]">{name}</Text>
-                    <Text className={`text-[12px] font-bold ${unread > 0 ? 'text-[#2B84B1]' : 'text-[#A0AEC0]'}`}>{time}</Text>
+                    <Text className="text-[17px] font-bold text-[#2286BE]">{item.name}</Text>
+                    <Text className="text-[13px] text-[#7C8B95] font-medium">{item.time}</Text>
                 </View>
-                <Text className={`text-[14px] ${unread > 0 ? 'text-[#1A2C42] font-semibold' : 'text-[#7C8B95] font-medium'}`} numberOfLines={1}>
-                    {message}
-                </Text>
+
+                <View className="flex-row justify-between items-center">
+                    <Text className="text-[15px] text-[#7C8B95] font-medium">{item.info}</Text>
+                    {item.unreadCount > 0 && (
+                        <View className="bg-[#2286BE] w-5 h-5 rounded-full items-center justify-center">
+                            <Text className="text-white text-[11px] font-bold">{item.unreadCount}</Text>
+                        </View>
+                    )}
+                </View>
             </View>
-            {unread > 0 && (
-                <View className="w-5 h-5 bg-[#FF4757] rounded-full items-center justify-center ml-2">
-                    <Text className="text-white text-[10px] font-bold">{unread}</Text>
-                </View>
-            )}
         </TouchableOpacity>
     );
 
     return (
-        <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-            {/* Header */}
-            <View className="px-6 py-4 bg-white shadow-sm shadow-black/5 z-10 w-full mb-2">
-                <Text className="text-[24px] font-bold text-[#1A2C42]">Messages</Text>
-            </View>
-
-            {/* Search */}
-            <View className="px-6 mb-4">
-                <View className="w-full h-[50px] bg-gray-50 rounded-[16px] px-4 flex-row items-center border border-gray-100">
-                    <Ionicons name="search" size={20} color="#A0AEC0" />
+        <View className="flex-1 bg-white">
+            {/* Header with Search */}
+            <SafeAreaView
+                style={{
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.03,
+                    shadowRadius: 10,
+                    elevation: 3,
+                    zIndex: 20,
+                }}
+                className="bg-white rounded-b-[40px] px-6 pb-8 pt-2"
+            >
+                <View
+                    style={{
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 10 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 20,
+                        elevation: 5,
+                    }}
+                    className="flex-row items-center bg-white rounded-[20px] px-4 h-[64px] border border-gray-50"
+                >
+                    <TouchableOpacity onPress={() => router.back()}>
+                        <Ionicons name="arrow-back" size={24} color="#2286BE" />
+                    </TouchableOpacity>
                     <TextInput
-                        placeholder="Search chats"
-                        className="flex-1 ml-2 text-[15px] text-[#1A2C42]"
-                        placeholderTextColor="#A0AEC0"
+                        placeholder="Search Category"
+                        placeholderTextColor="#7C8B95"
+                        className="flex-1 ml-4 text-[15px] font-medium text-[#1A2C42]"
                     />
+                    <TouchableOpacity className="bg-[#2286BE] w-10 h-10 rounded-xl items-center justify-center">
+                        <Ionicons name="search" size={20} color="white" />
+                    </TouchableOpacity>
                 </View>
+            </SafeAreaView>
+
+            {/* Title */}
+            <View className="px-6 mb-8 flex-row items-center mt-2">
+                <View className="w-1.5 h-6 bg-[#2286BE] rounded-full mr-3" />
+                <Text className="text-[24px] font-bold text-[#1A2C42]">Chat</Text>
             </View>
 
-            <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-                <ChatRow
-                    name="Alice Smith"
-                    message="Hey, just checking on the app UI progress. Thanks!"
-                    time="10:42 AM"
-                    unread={2}
-                    online={true}
-                />
-                <ChatRow
-                    name="TechCorp Inc."
-                    message="Can we schedule a call for tomorrow?"
-                    time="Yesterday"
-                    online={true}
-                />
-                <ChatRow
-                    name="Mike Johnson"
-                    message="I sent over the requirements doc."
-                    time="Monday"
-                />
-                <ChatRow
-                    name="Sarah Williams"
-                    message="Wow, this looks amazing! Thank you so much."
-                    time="Oct 12"
-                />
-                <ChatRow
-                    name="DesignStudio"
-                    message="Please review the feedback left on the delivery."
-                    time="Oct 10"
-                    unread={1}
-                />
-            </ScrollView>
-        </SafeAreaView>
+            {/* Tab Switcher */}
+            <View className="px-6 mb-6">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                    {['All', 'Unread (3)', 'Groups', 'Favorite'].map((tab) => (
+                        <TouchableOpacity
+                            key={tab}
+                            onPress={() => setActiveTab(tab)}
+                            className={`px-7 py-3 rounded-[20px] mr-3 ${activeTab === tab ? 'bg-[#2286BE]' : 'bg-transparent'}`}
+                        >
+                            <Text className={`text-[15px] font-bold ${activeTab === tab ? 'text-white' : 'text-[#2286BE]'}`}>
+                                {tab}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
+            {/* Chat List */}
+            <FlatList
+                data={CHAT_DATA}
+                keyExtractor={(item) => item.id}
+                renderItem={renderChatItem}
+                ItemSeparatorComponent={() => <View className="h-[1px] bg-[#F2F2F2] mx-6" />}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+            />
+        </View>
     );
 }
