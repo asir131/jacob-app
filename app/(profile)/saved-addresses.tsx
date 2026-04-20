@@ -3,8 +3,13 @@ import { useRouter } from "expo-router";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
+import { useAuth } from "@/src/contexts/AuthContext";
+
 export default function SavedAddressesPage() {
     const router = useRouter();
+    const { user } = useAuth();
+    const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
     const AddressCard = ({ icon, type, address, isDefault = false }: any) => (
         <View className="bg-white rounded-[24px] p-5 mb-4 border border-gray-100 flex-row items-start shadow-sm shadow-black/5">
@@ -45,21 +50,28 @@ export default function SavedAddressesPage() {
             <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
                 <AddressCard
                     icon="home-outline"
-                    type="Home"
-                    address="15A James Street, Manhattan, New York City, 10001, USA"
+                    type="Primary Address"
+                    address={user?.address || "No saved address yet. Set one from Personal Information."}
                     isDefault={true}
                 />
-                <AddressCard
-                    icon="business-outline"
-                    type="Work"
-                    address="Level 4, 120 Tech Avenue, Silicon Valley, CA 94025, USA"
-                />
+                <View className="bg-white rounded-[24px] p-5 mb-4 border border-gray-100 shadow-sm shadow-black/5">
+                    <Text className="text-[16px] font-bold text-[#1A2C42] mb-2">Map Preview</Text>
+                    <Text className="text-[13px] text-[#7C8B95] mb-4">Your saved address location from the profile page.</Text>
+                    <MapboxLocationPicker
+                        token={mapboxToken}
+                        initialCenter={{
+                            lat: typeof user?.locationLat === "number" ? user.locationLat : 40.7128,
+                            lng: typeof user?.locationLng === "number" ? user.locationLng : -74.006,
+                        }}
+                        onCenterChange={() => { }}
+                    />
+                </View>
             </ScrollView>
 
             <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100">
-                <TouchableOpacity className="bg-[#2B84B1] w-full py-5 rounded-[18px] items-center flex-row justify-center shadow-lg shadow-[#2B84B1]/30">
+                <TouchableOpacity onPress={() => router.push("/(profile)/personal-info" as any)} className="bg-[#2B84B1] w-full py-5 rounded-[18px] items-center flex-row justify-center shadow-lg shadow-[#2B84B1]/30">
                     <Ionicons name="location-outline" size={22} color="white" />
-                    <Text className="text-white font-bold text-[17px] ml-2">Add New Location</Text>
+                    <Text className="text-white font-bold text-[17px] ml-2">Manage Address</Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>

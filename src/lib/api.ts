@@ -3,12 +3,19 @@ import { API_BASE_URL } from "@/src/lib/env";
 import type {
   ApiEnvelope,
   AppUser,
+  ClientDashboardData,
   CategoryItem,
   ChatMessage,
   ConversationSummary,
+  DashboardData,
+  FaqItem,
   OrderSummary,
   PublicServiceCard,
   PublicServiceDetail,
+  ServiceRequestSummary,
+  SupportMessage,
+  WithdrawalBalance,
+  WithdrawalSummary,
 } from "@/src/types/api";
 
 type RequestOptions = {
@@ -57,7 +64,7 @@ const request = async <T>(endpoint: string, options: RequestOptions = {}): Promi
     body:
       options.body === undefined
         ? undefined
-        : options.body instanceof FormData
+      : options.body instanceof FormData
           ? options.body
           : JSON.stringify(options.body),
   });
@@ -70,6 +77,20 @@ const request = async <T>(endpoint: string, options: RequestOptions = {}): Promi
   return payload;
 };
 
+const requestWithFriendlyErrors = async <T>(endpoint: string, options: RequestOptions = {}) => {
+  try {
+    return await request<T>(endpoint, options);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        `Network request failed. Mobile app tried ${API_BASE_URL || "an empty API URL"}. Set EXPO_PUBLIC_API_URL if needed.`,
+        0
+      );
+    }
+    throw error;
+  }
+};
+
 const mapCategory = (item: any): CategoryItem => ({
   id: String(item?._id || item?.id || ""),
   name: String(item?.name || ""),
@@ -78,36 +99,74 @@ const mapCategory = (item: any): CategoryItem => ({
 });
 
 export const mobileApi = {
-  request,
+  request: requestWithFriendlyErrors,
   login: (body: { email: string; password: string }) =>
-    request<{ accessToken: string; refreshToken: string; user: AppUser }>("/api/auth/login", {
+    requestWithFriendlyErrors<{ accessToken: string; refreshToken: string; user: AppUser }>("/api/auth/login", {
+      method: "POST",
+      body,
+    }),
+  refreshToken: (body: { refreshToken: string }) =>
+    requestWithFriendlyErrors<{ accessToken: string; refreshToken: string }>("/api/auth/refresh-token", {
+      method: "POST",
+      body,
+    }),
+  logout: (body: { refreshToken: string }) =>
+    requestWithFriendlyErrors<unknown>("/api/auth/logout", {
       method: "POST",
       body,
     }),
   signup: (body: { firstName: string; lastName: string; email: string; password: string; role: "client" | "provider" }) =>
-    request<{ email: string; otpExpiresInMinutes: number }>("/api/auth/signup", { method: "POST", body }),
+    requestWithFriendlyErrors<{ email: string; otpExpiresInMinutes: number }>("/api/auth/signup", { method: "POST", body }),
   verifySignupOtp: (body: { email: string; otp: string }) =>
-    request<{ id: string; firstName: string; lastName: string; email: string; role: string }>("/api/auth/verify-signup-otp", {
+    requestWithFriendlyErrors<{ id: string; firstName: string; lastName: string; email: string; role: string }>("/api/auth/verify-signup-otp", {
       method: "POST",
       body,
     }),
-  getMyProfile: () => request<{ user: AppUser }>("/api/profile/me"),
+  getMyProfile: () => requestWithFriendlyErrors<{ user: AppUser }>("/api/profile/me"),
   getCategories: async () => {
-    const payload = await request<any[]>("/api/categories");
+    const payload = await requestWithFriendlyErrors<any[]>("/api/categories");
     return {
       ...payload,
       data: Array.isArray(payload.data) ? payload.data.map(mapCategory) : [],
     };
   },
   getPublicServices: (query = "") =>
-    request<Paginated<PublicServiceCard>>(`/api/gigs/public${query ? `?${query}` : ""}`),
-  getPublicServiceById: (id: string) => request<PublicServiceDetail>(`/api/gigs/public/${id}`),
+    requestWithFriendlyErrors<Paginated<PublicServiceCard>>(`/api/gigs/public${query ? `?${query}` : ""}`),
+  getPublicServiceById: (id: string) => requestWithFriendlyErrors<PublicServiceDetail>(`/api/gigs/public/${id}`),
   getProviderProfile: (providerId: string) =>
-    request<any>(`/api/profile/provider/${providerId}/public`),
+    requestWithFriendlyErrors<any>(`/api/profile/provider/${providerId}/public`),
+  getFaqs: () => requestWithFriendlyErrors<FaqItem[]>("/api/faqs"),
+  getClientDashboard: () =>
+    requestWithFriendlyErrors<ClientDashboardData>("/api/orders/client/dashboard"),
+  getProviderDashboard: () =>
+    requestWithFriendlyErrors<DashboardData>("/api/orders/provider/dashboard"),
+  createServiceRequest: (body: FormData) =>
+    requestWithFriendlyErrors<{ request?: ServiceRequestSummary; notifiedProviders?: number }>("/api/service-requests", { method: "POST", body }),
+  getClientServiceRequests: (query = "page=1&limit=8&status=all") =>
+    requestWithFriendlyErrors<{
+      items?: ServiceRequestSummary[];
+      pagination?: Paginated<ServiceRequestSummary>["pagination"];
+    }>(`/api/service-requests/client?${query}`),
+  getProviderServiceRequests: (query = "page=1&limit=8&radiusKm=30") =>
+    requestWithFriendlyErrors<{
+      items?: ServiceRequestSummary[];
+      pagination?: Paginated<ServiceRequestSummary>["pagination"];
+    }>(`/api/service-requests/provider?${query}`),
+  acceptServiceRequest: (id: string) =>
+    requestWithFriendlyErrors<{ request?: ServiceRequestSummary; order?: { id?: string; orderNumber?: string } }>(
+      `/api/service-requests/provider/${id}/accept`,
+      { method: "PATCH" }
+    ),
+  ignoreServiceRequest: (id: string) =>
+    requestWithFriendlyErrors<{ requestId?: string }>(`/api/service-requests/provider/${id}/ignore`, { method: "PATCH" }),
   getClientOrders: (query = "page=1&limit=8&status=all") =>
-    request<Paginated<OrderSummary>>(`/api/orders/client?${query}`),
+    requestWithFriendlyErrors<Paginated<OrderSummary>>(`/api/orders/client?${query}`),
   getProviderOrders: (query = "page=1&limit=8&status=all") =>
-    request<Paginated<OrderSummary>>(`/api/orders/provider?${query}`),
+    requestWithFriendlyErrors<Paginated<OrderSummary>>(`/api/orders/provider?${query}`),
+  getClientOrderDetail: (id: string) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/client/${id}`),
+  getProviderOrderDetail: (id: string) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/provider/${id}`),
   createOrder: (body: {
     gigId: string;
     packageName: string;
@@ -116,22 +175,74 @@ export const mobileApi = {
     scheduledTime: string;
     serviceAddress: string;
     specialInstructions?: string;
-  }) => request<{ order: OrderSummary }>("/api/orders", { method: "POST", body }),
-  acceptProviderOrder: (id: string) => request<unknown>(`/api/orders/provider/${id}/accept`, { method: "PATCH" }),
-  declineProviderOrder: (id: string) => request<unknown>(`/api/orders/provider/${id}/decline`, { method: "PATCH" }),
-  getMyGigs: () => request<{ publishedGigs?: any[]; pendingRequests?: any[] }>("/api/gigs/mine"),
-  createGig: (body: FormData) => request<unknown>("/api/gigs", { method: "POST", body }),
-  updateGig: (id: string, body: FormData) => request<unknown>(`/api/gigs/${id}`, { method: "PUT", body }),
-  deleteGig: (id: string) => request<unknown>(`/api/gigs/${id}`, { method: "DELETE" }),
-  getConversations: () => request<ConversationSummary[]>("/api/chats/conversations"),
+  }) => requestWithFriendlyErrors<{ order: OrderSummary }>("/api/orders", { method: "POST", body }),
+  acceptProviderOrder: (id: string) => requestWithFriendlyErrors<unknown>(`/api/orders/provider/${id}/accept`, { method: "PATCH" }),
+  declineProviderOrder: (id: string) => requestWithFriendlyErrors<unknown>(`/api/orders/provider/${id}/decline`, { method: "PATCH" }),
+  submitProviderDelivery: (id: string, body: FormData) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/provider/${id}/deliver`, { method: "PATCH", body }),
+  respondProviderRevision: (id: string, body: { action: "accept" | "decline"; note?: string }) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/provider/${id}/revision-response`, { method: "PATCH", body }),
+  requestClientRevision: (id: string, body: { note: string }) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/client/${id}/request-revision`, { method: "PATCH", body }),
+  cancelClientRevision: (id: string) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/client/${id}/cancel-revision`, { method: "PATCH" }),
+  sendClientResolutionMessage: (id: string, body: { text?: string }) =>
+    requestWithFriendlyErrors<{ conversationId?: string }>(`/api/orders/client/${id}/resolution-message`, { method: "POST", body }),
+  createClientCheckoutSession: (id: string) =>
+    requestWithFriendlyErrors<{ checkoutUrl?: string; sessionId?: string }>(`/api/orders/client/${id}/stripe-checkout`, { method: "POST" }),
+  confirmClientCheckoutPayment: (id: string, body: { sessionId: string; clientRating?: number; clientReview?: string }) =>
+    requestWithFriendlyErrors<{ order: OrderSummary; providerEarningsAmount?: number; platformFeeAmount?: number }>(
+      `/api/orders/client/${id}/stripe-confirm`,
+      { method: "POST", body }
+    ),
+  submitClientOrderReview: (id: string, body: { rating: number; review?: string }) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/client/${id}/review`, { method: "POST", body }),
+  finalizeClientOrder: (id: string) =>
+    requestWithFriendlyErrors<{ order: OrderSummary }>(`/api/orders/client/${id}/finalize`, { method: "PATCH" }),
+  getMyGigs: () => requestWithFriendlyErrors<{ publishedGigs?: any[]; pendingRequests?: any[] }>("/api/gigs/mine"),
+  createGig: (body: FormData) => requestWithFriendlyErrors<unknown>("/api/gigs", { method: "POST", body }),
+  updateGig: (id: string, body: FormData) => requestWithFriendlyErrors<unknown>(`/api/gigs/${id}`, { method: "PUT", body }),
+  deleteGig: (id: string) => requestWithFriendlyErrors<unknown>(`/api/gigs/${id}`, { method: "DELETE" }),
+  getSavedServices: () => requestWithFriendlyErrors<{ items: PublicServiceCard[] }>("/api/profile/me/saved-services"),
+  saveService: (gigId: string) =>
+    requestWithFriendlyErrors<{ user: AppUser }>(`/api/profile/me/saved-services/${gigId}`, { method: "POST" }),
+  removeSavedService: (gigId: string) =>
+    requestWithFriendlyErrors<{ user: AppUser }>(`/api/profile/me/saved-services/${gigId}`, { method: "DELETE" }),
+  updateProfile: (body: Partial<AppUser>) =>
+    requestWithFriendlyErrors<{ user: AppUser }>("/api/profile/me", { method: "PUT", body }),
+  uploadAvatar: (body: FormData) =>
+    requestWithFriendlyErrors<{ avatarUrl?: string; user: AppUser }>("/api/profile/avatar", { method: "POST", body }),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    requestWithFriendlyErrors<unknown>("/api/profile/change-password", { method: "POST", body }),
+  submitProviderPayoutInfo: (body: FormData) =>
+    requestWithFriendlyErrors<{ user: AppUser }>("/api/profile/provider/payout-info", { method: "POST", body }),
+  getMyWithdrawals: (query = "page=1&limit=8") =>
+    requestWithFriendlyErrors<{
+      balance?: WithdrawalBalance;
+      withdrawals?: WithdrawalSummary[];
+      pagination?: Paginated<WithdrawalSummary>["pagination"];
+    }>(`/api/withdrawals/me?${query}`),
+  requestWithdrawal: (body: { amount: number; note?: string }) =>
+    requestWithFriendlyErrors<WithdrawalSummary>("/api/withdrawals/me/request", { method: "POST", body }),
+  createSupportMessage: (body: { fullName: string; email: string; subject: string; message: string }) =>
+    requestWithFriendlyErrors<SupportMessage>("/api/support", { method: "POST", body }),
+  getConversations: () => requestWithFriendlyErrors<ConversationSummary[]>("/api/chats/conversations"),
   ensureConversationByOrder: (orderId: string) =>
-    request<ConversationSummary>(`/api/chats/conversations/order/${orderId}`, { method: "POST" }),
+    requestWithFriendlyErrors<ConversationSummary>(`/api/chats/conversations/order/${orderId}`, { method: "POST" }),
   getConversationMessages: (conversationId: string, query = "page=1&limit=50") =>
-    request<Paginated<ChatMessage>>(`/api/chats/conversations/${conversationId}/messages?${query}`),
+    requestWithFriendlyErrors<Paginated<ChatMessage>>(`/api/chats/conversations/${conversationId}/messages?${query}`),
   sendConversationMessage: (conversationId: string, body: FormData) =>
-    request<ChatMessage>(`/api/chats/conversations/${conversationId}/messages`, { method: "POST", body }),
+    requestWithFriendlyErrors<ChatMessage>(`/api/chats/conversations/${conversationId}/messages`, { method: "POST", body }),
   markConversationRead: (conversationId: string) =>
-    request<{ modifiedCount?: number }>(`/api/chats/conversations/${conversationId}/read`, { method: "POST" }),
+    requestWithFriendlyErrors<{ modifiedCount?: number }>(`/api/chats/conversations/${conversationId}/read`, { method: "POST" }),
+  clearConversationHistory: (conversationId: string) =>
+    requestWithFriendlyErrors<{ deletedCount?: number }>(`/api/chats/conversations/${conversationId}/messages`, { method: "DELETE" }),
+  blockConversationUser: (conversationId: string) =>
+    requestWithFriendlyErrors<{ blockedBy?: string }>(`/api/chats/conversations/${conversationId}/block`, { method: "POST" }),
+  unblockConversationUser: (conversationId: string) =>
+    requestWithFriendlyErrors<{ blockedBy?: string | null }>(`/api/chats/conversations/${conversationId}/block`, { method: "DELETE" }),
+  markAllMessagesRead: () =>
+    requestWithFriendlyErrors<{ modifiedCount?: number }>("/api/chats/conversations/read-all", { method: "POST" }),
 };
 
 export { ApiError };

@@ -1,17 +1,42 @@
-import { Platform } from "react-native";
+import Constants from "expo-constants";
+import { NativeModules, Platform } from "react-native";
 
 const normalizeBaseUrl = (value?: string) => {
   if (!value) return "";
   return value.endsWith("/") ? value.slice(0, -1) : value;
 };
 
+const deriveDevHost = () => {
+  const candidates = [
+    NativeModules?.SourceCode?.scriptURL,
+    Constants.expoConfig?.hostUri,
+    Constants.linkingUri,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  for (const candidate of candidates) {
+    const match = candidate.match(/^(?:exp|exps|http|https):\/\/([^/:]+)/i);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return "";
+};
+
+const devHost = deriveDevHost();
 const androidDefault = "http://10.0.2.2:5001";
 const iosDefault = "http://localhost:5001";
+const smartDefault =
+  devHost && devHost !== "localhost" && devHost !== "127.0.0.1"
+    ? `http://${devHost}:5001`
+    : Platform.OS === "android"
+      ? androidDefault
+      : iosDefault;
 
 export const API_BASE_URL =
   normalizeBaseUrl(process.env.EXPO_PUBLIC_API_URL) ||
   normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL) ||
-  (Platform.OS === "android" ? androidDefault : iosDefault);
+  normalizeBaseUrl(smartDefault);
 
 export const SOCKET_URL =
   normalizeBaseUrl(process.env.EXPO_PUBLIC_SOCKET_URL) ||

@@ -1,10 +1,6 @@
-import { useAuth } from "@/src/contexts/AuthContext";
-import { SOCKET_URL } from "@/src/lib/env";
-import { mobileApi } from "@/src/lib/api";
-import type { ChatMessage } from "@/src/types/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -17,11 +13,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { io, Socket } from "socket.io-client";
+
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import type { ChatMessage } from "@/src/types/api";
+import {
+  useGetConversationMessagesQuery,
+  useMarkConversationMessagesAsReadMutation,
+  useSendConversationMessageMutation,
+} from "@/src/store/services/apiSlice";
 
 export default function ChatDetailsPage() {
   const router = useRouter();
-  const { accessToken, user } = useAuth();
+  const { user } = useAuth();
+  const { socket } = useSocketNotifications();
   const { conversationId = "", name = "User", avatar, info = "" } = useLocalSearchParams<{
     conversationId?: string;
     name?: string;
@@ -29,68 +34,57 @@ export default function ChatDetailsPage() {
     info?: string;
   }>();
   const scrollViewRef = useRef<ScrollView>(null);
-  const socketRef = useRef<Socket | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
+  const { data, isLoading } = useGetConversationMessagesQuery(
+    { conversationId, page: 1, limit: 100 },
+    { skip: !conversationId }
+  );
+  const [markRead] = useMarkConversationMessagesAsReadMutation();
+  const [sendMessage, { isLoading: sending }] = useSendConversationMessageMutation();
+
+  const initialMessages = useMemo(() => data?.data.items || [], [data]);
 
   useEffect(() => {
-    const loadMessages = async () => {
-      setLoading(true);
-      try {
-        const payload = await mobileApi.getConversationMessages(conversationId, "page=1&limit=100");
-        setMessages(payload.data.items || []);
-        await mobileApi.markConversationRead(conversationId);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    setMessages(initialMessages);
     if (conversationId) {
-      void loadMessages();
+      void markRead(conversationId);
     }
-  }, [conversationId]);
+  }, [conversationId, initialMessages, markRead]);
 
   useEffect(() => {
-    if (!accessToken || !conversationId) return;
+    if (!socket || !conversationId) return;
 
-    const socket = io(SOCKET_URL, {
-      transports: ["websocket"],
-      auth: {
-        token: `Bearer ${accessToken}`,
-      },
-    });
-    socketRef.current = socket;
-
-    socket.on("chat:message:new", (payload: ChatMessage) => {
+    const handleNewMessage = (payload: ChatMessage) => {
       if (payload.conversationId !== conversationId) return;
       setMessages((current) => {
         if (current.some((message) => message.id === payload.id)) return current;
         return [...current, payload];
       });
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 120);
-    });
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
     };
-  }, [accessToken, conversationId]);
+
+    socket.on("chat:message:new", handleNewMessage);
+    return () => {
+      socket.off("chat:message:new", handleNewMessage);
+    };
+  }, [conversationId, socket]);
 
   const handleSend = async () => {
     if (!input.trim() || !conversationId) return;
     const formData = new FormData();
     formData.append("text", input.trim());
 
-    setSending(true);
     try {
-      const payload = await mobileApi.sendConversationMessage(conversationId, formData);
-      setMessages((current) => [...current, payload.data]);
+      const payload = await sendMessage({ conversationId, formData }).unwrap();
+      setMessages((current) => {
+        if (current.some((message) => message.id === payload.data.id)) return current;
+        return [...current, payload.data];
+      });
       setInput("");
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-    } finally {
-      setSending(false);
+    } catch {
+      // Leave message box state untouched if send fails.
     }
   };
 
@@ -127,7 +121,7 @@ export default function ChatDetailsPage() {
       </SafeAreaView>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1" keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}>
-        {loading ? (
+        {isLoading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#2286BE" />
           </View>
@@ -193,7 +187,7 @@ export default function ChatDetailsPage() {
             />
           </View>
 
-          <TouchableOpacity onPress={handleSend} disabled={sending} className="bg-[#2286BE] w-[54px] h-[54px] rounded-full items-center justify-center">
+          <TouchableOpacity onPress={() => void handleSend()} disabled={sending} className="bg-[#2286BE] w-[54px] h-[54px] rounded-full items-center justify-center">
             {sending ? (
               <ActivityIndicator color="white" />
             ) : (

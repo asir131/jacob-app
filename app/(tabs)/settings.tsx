@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { useState } from "react";
 import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +10,7 @@ import { useRouter } from "expo-router";
 export default function SettingsPage() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    const { unreadCount, socketConnected } = useSocketNotifications();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [pushEnabled, setPushEnabled] = useState(true);
@@ -104,7 +106,11 @@ export default function SettingsPage() {
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="card-outline" label="Payment Methods" value="Visa ending 4242" color="#2B84B1" route="/(profile)/payment-methods" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="location-outline" label="Saved Addresses" value="2 places" color="#2B84B1" route="/(profile)/saved-addresses" />
+                        <SettingsRow icon="location-outline" label="Saved Addresses" value={user?.address ? "1 place" : "Not set"} color="#2B84B1" route="/(profile)/saved-addresses" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="heart-outline" label="Saved Services" color="#2B84B1" route="/client-saved-services" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="document-text-outline" label="My Requests" color="#2B84B1" route="/client-requests" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
                     </View>
@@ -134,7 +140,7 @@ export default function SettingsPage() {
                             onChange={setEmailEnabled}
                         />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="language-outline" label="Language" value="English (US)" color="#F5A623" />
+                        <SettingsRow icon="notifications-circle-outline" label="Live Notifications" value={unreadCount ? `${unreadCount} new` : socketConnected ? "Connected" : "Offline"} color="#F5A623" route="/notifications" />
                     </View>
                 </View>
 
@@ -144,7 +150,7 @@ export default function SettingsPage() {
                         Support & Info
                     </Text>
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow icon="help-buoy-outline" label="Help Center" color="#10B981" />
+                        <SettingsRow icon="help-buoy-outline" label="Help Center" color="#10B981" route="/(provider)/support" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="document-text-outline" label="Terms of Service" color="#10B981" />
                         <View className="h-[1px] bg-gray-100 ml-14" />

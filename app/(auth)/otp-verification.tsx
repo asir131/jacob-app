@@ -1,4 +1,3 @@
-import { ApiError, mobileApi } from "@/src/lib/api";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
@@ -14,13 +13,14 @@ import {
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useVerifySignupOtpMutation } from "@/src/store/services/apiSlice";
 
 export default function OTPVerificationScreen() {
     const router = useRouter();
     const { email = "", role = "client", mode = "signup" } = useLocalSearchParams<{ email?: string; role?: string; mode?: string }>();
     const [otp, setOtp] = useState(["", "", "", "", "", ""]);
     const [timer, setTimer] = useState(60);
-    const [loading, setLoading] = useState(false);
+    const [verifySignupOtp, { isLoading: loading }] = useVerifySignupOtpMutation();
     const inputRefs = [
         useRef<TextInput>(null),
         useRef<TextInput>(null),
@@ -71,18 +71,15 @@ export default function OTPVerificationScreen() {
             return;
         }
 
-        setLoading(true);
         try {
-            await mobileApi.verifySignupOtp({ email, otp: otp.join("") });
+            await verifySignupOtp({ email, otp: otp.join("") }).unwrap();
             router.push({
                 pathname: "/(auth)/otp-success",
                 params: { role },
             });
         } catch (error) {
-            const message = error instanceof ApiError ? error.message : "OTP verification failed.";
+            const message = error instanceof Error ? error.message : "OTP verification failed.";
             Alert.alert("Verification failed", message);
-        } finally {
-            setLoading(false);
         }
     };
 

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
@@ -8,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 export default function ProviderSettings() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    const { unreadCount, socketConnected } = useSocketNotifications();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [available, setAvailable] = useState(true);
@@ -76,6 +78,8 @@ export default function ProviderSettings() {
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="wallet-outline" label="Earnings & Billing" color="#2B84B1" route="/(provider)/earnings" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="document-text-outline" label="Requested Orders" color="#2B84B1" route="/(provider)/requests" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="analytics-outline" label="Seller Analytics" color="#2B84B1" route="/(provider)/analytics" />
                     </View>
                 </View>
@@ -86,11 +90,11 @@ export default function ProviderSettings() {
                         General Settings
                     </Text>
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow icon="person-outline" label="Personal Information" color="#2B84B1" route="/(profile)/personal-info" />
+                        <SettingsRow icon="person-outline" label="Business Profile" color="#2B84B1" route="/(profile)/personal-info" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="notifications-outline" label="Notification Preferences" color="#2B84B1" route="/(profile)/notifications" />
+                        <SettingsRow icon="notifications-outline" label="Live Notifications" color="#2B84B1" value={unreadCount ? `${unreadCount} new` : socketConnected ? "Connected" : "Offline"} route="/notifications" />
                     </View>
                 </View>
 

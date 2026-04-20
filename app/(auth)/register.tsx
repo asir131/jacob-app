@@ -1,5 +1,4 @@
 import ImageImport from "@/assets/ImageImport";
-import { ApiError, mobileApi } from "@/src/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -17,6 +16,7 @@ import {
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSignupMutation } from "@/src/store/services/apiSlice";
 
 export default function RegisterScreen() {
     const router = useRouter();
@@ -24,7 +24,7 @@ export default function RegisterScreen() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [signup, { isLoading: loading }] = useSignupMutation();
 
     const handleSignUp = async () => {
         const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
@@ -33,24 +33,21 @@ export default function RegisterScreen() {
             return;
         }
 
-        setLoading(true);
         try {
-            await mobileApi.signup({
+            await signup({
                 firstName,
                 lastName: rest.join(" "),
                 email: email.trim(),
                 password,
                 role: "client",
-            });
+            }).unwrap();
             router.push({
                 pathname: "/(auth)/otp-verification",
                 params: { email: email.trim(), role: "client", mode: "signup" },
             });
         } catch (error) {
-            const message = error instanceof ApiError ? error.message : "Signup failed.";
+            const message = error instanceof Error ? error.message : "Signup failed.";
             Alert.alert("Could not create account", message);
-        } finally {
-            setLoading(false);
         }
     };
 

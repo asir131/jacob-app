@@ -1,11 +1,21 @@
-import { mobileApi } from "@/src/lib/api";
-import { formatDateLabel } from "@/src/lib/formatters";
-import type { ConversationSummary } from "@/src/types/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { formatDateLabel } from "@/src/lib/formatters";
+import { useGetConversationsQuery } from "@/src/store/services/apiSlice";
 
 export function ConversationListScreen() {
   const router = useRouter();
@@ -13,23 +23,9 @@ export function ConversationListScreen() {
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-
-  useEffect(() => {
-    const loadConversations = async () => {
-      try {
-        const payload = await mobileApi.getConversations();
-        setConversations(payload.data || []);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadConversations();
-  }, []);
-
+  const { data, isLoading } = useGetConversationsQuery();
   const filtered = useMemo(() => {
+    const conversations = data?.data || [];
     let items = conversations;
     if (activeTab === "Unread") {
       items = items.filter((item) => Boolean(item.lastMessage));
@@ -41,7 +37,7 @@ export function ConversationListScreen() {
       const haystacks = [item.otherUser.name, item.orderName || "", item.lastMessage || ""];
       return haystacks.some((value) => value.toLowerCase().includes(query));
     });
-  }, [activeTab, conversations, search]);
+  }, [activeTab, data?.data, search]);
 
   return (
     <View className="flex-1 bg-white">
@@ -99,7 +95,7 @@ export function ConversationListScreen() {
         </ScrollView>
       </View>
 
-      {loading ? (
+      {isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#2286BE" />
         </View>
@@ -126,7 +122,9 @@ export function ConversationListScreen() {
                 {item.otherUser.avatar ? (
                   <Image source={{ uri: item.otherUser.avatar }} className="w-[60px] h-[60px] rounded-full border-2 border-[#EAF3FA]" />
                 ) : (
-                  <View className="w-[60px] h-[60px] rounded-full border-2 border-[#EAF3FA] bg-[#EAF3FA]" />
+                  <View className="w-[60px] h-[60px] rounded-full border-2 border-[#EAF3FA] bg-[#EAF3FA] items-center justify-center">
+                    <Ionicons name="person-outline" size={26} color="#2286BE" />
+                  </View>
                 )}
               </View>
 

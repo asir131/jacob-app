@@ -1,384 +1,694 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from 'expo-image-picker';
-import { mobileApi } from "@/src/lib/api";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView, Platform, ScrollView, Text, TextInput,
-    TouchableOpacity, View
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Types for better development
-type PackageType = 'basic' | 'standard' | 'premium';
+import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
+import { resolveAddressFromCoordinates } from "@/src/lib/geocode";
+import type { CategoryItem } from "@/src/types/api";
+import {
+  useCreateGigMutation,
+  useGetCategoriesQuery,
+  useGetMyGigsQuery,
+  useUpdateGigMutation,
+} from "@/src/store/services/apiSlice";
 
-interface PackageData {
-    name: string;
-    description: string;
-    deliveryTime: string;
-    revisions: string;
-    price: string;
-}
+type PackageKey = "basic" | "standard" | "premium";
+
+type PackageData = {
+  name: string;
+  title: string;
+  description: string;
+  deliveryTime: string;
+  price: string;
+};
+
+type PickerAsset = {
+  uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
+
+const PACKAGE_KEYS: PackageKey[] = ["basic", "standard", "premium"];
+const PACKAGE_NAMES = ["Basic", "Standard", "Premium"];
+const PACKAGE_TITLES = ["Basic Package", "Standard Package", "Premium Package"];
+const RADIUS_OPTIONS = ["5", "10", "25", "50"];
+const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
+const MILES_TO_KM = 1.60934;
+
+const createInitialPackages = (): Record<PackageKey, PackageData> => ({
+  basic: { name: "Basic", title: "Basic Package", description: "", deliveryTime: "1", price: "15" },
+  standard: { name: "Standard", title: "Standard Package", description: "", deliveryTime: "3", price: "30" },
+  premium: { name: "Premium", title: "Premium Package", description: "", deliveryTime: "5", price: "60" },
+});
+
+const convertMilesToKm = (miles: string) => Math.round((Number(miles) || 0) * MILES_TO_KM);
+
+const convertKmToNearestMilesOption = (km: number | null | undefined) => {
+  const miles = (Number(km) || 0) / MILES_TO_KM;
+  return RADIUS_OPTIONS.reduce((closest, option) =>
+    Math.abs(Number(option) - miles) < Math.abs(Number(closest) - miles) ? option : closest
+  );
+};
 
 export default function CreateServicePage() {
-    const router = useRouter();
-    const { editId } = useLocalSearchParams<{ editId?: string }>();
-    const [step, setStep] = useState(1);
-    const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [activePackage, setActivePackage] = useState<PackageKey>("basic");
+  const [selectedRadius, setSelectedRadius] = useState("25");
+  const [selectedMapCoords, setSelectedMapCoords] = useState(DEFAULT_CENTER);
+  const [settingAddress, setSettingAddress] = useState(false);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<PickerAsset[]>([]);
+  const [packages, setPackages] = useState<Record<PackageKey, PackageData>>(createInitialPackages());
+  const [formData, setFormData] = useState({
+    title: "",
+    categorySlug: "",
+    categoryName: "",
+    customCategoryName: "",
+    customCategoryDescription: "",
+    expertType: "solo" as "solo" | "team",
+    description: "",
+    requirements: "",
+    baseCity: "",
+  });
 
-    // --- Dynamic States ---
-    const [formData, setFormData] = useState({
-        title: "",
-        category: "AI Automation",
-        tags: "",
-        description: "",
-        images: [] as string[],
+  const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+  const isCustomCategory = formData.categorySlug === "create-your-own-category";
+  const displayedImages = [...existingImageUrls, ...newImages.map((asset) => asset.uri)];
+  const { data: categoriesData, isLoading: loadingCategories } = useGetCategoriesQuery();
+  const { data: gigsData, isFetching: loadingGig } = useGetMyGigsQuery(undefined, { skip: !editId });
+  const [createGig] = useCreateGigMutation();
+  const [updateGig] = useUpdateGigMutation();
+
+  useEffect(() => {
+    const nextCategories = categoriesData?.data || [];
+    setCategories(nextCategories);
+    if (!editId && nextCategories[0]) {
+      setFormData((current) => ({
+        ...current,
+        categorySlug: current.categorySlug || nextCategories[0].slug,
+        categoryName: current.categoryName || nextCategories[0].name,
+      }));
+    }
+  }, [categoriesData?.data, editId]);
+
+  useEffect(() => {
+    if (!editId) return;
+    const allGigs = [
+      ...(Array.isArray(gigsData?.data.publishedGigs) ? gigsData?.data.publishedGigs : []),
+      ...(Array.isArray(gigsData?.data.pendingRequests) ? gigsData?.data.pendingRequests : []),
+    ];
+    const gig = allGigs.find((item: any) => String(item._id || item.id) === String(editId));
+    if (!gig) return;
+
+    const customSlug = String(gig.categorySlug || "");
+    const isCustom = customSlug === "create-your-own-category" || gig.customCategoryName || gig.customCategoryDescription;
+    const gigPackages = Array.isArray(gig.packages) ? gig.packages : [];
+
+    setFormData({
+      title: gig.title || "",
+      categorySlug: isCustom ? "create-your-own-category" : customSlug,
+      categoryName: gig.categoryName || "",
+      customCategoryName: gig.customCategoryName || "",
+      customCategoryDescription: gig.customCategoryDescription || "",
+      expertType: gig.expertType === "team" ? "team" : "solo",
+      description: gig.description || "",
+      requirements: gig.requirements || "",
+      baseCity: gig.baseCity || "",
+    });
+    setSelectedMapCoords({
+      lat: typeof gig.locationLat === "number" ? gig.locationLat : DEFAULT_CENTER.lat,
+      lng: typeof gig.locationLng === "number" ? gig.locationLng : DEFAULT_CENTER.lng,
+    });
+    setSelectedRadius(convertKmToNearestMilesOption(gig.travelRadiusKm));
+    setExistingImageUrls(Array.isArray(gig.images) ? gig.images : []);
+    setNewImages([]);
+    setPackages({
+      basic: {
+        name: "Basic",
+        title: "Basic Package",
+        description: gigPackages[0]?.description || "",
+        deliveryTime: String(gigPackages[0]?.deliveryTime || "1"),
+        price: String(gigPackages[0]?.price || "15"),
+      },
+      standard: {
+        name: "Standard",
+        title: "Standard Package",
+        description: gigPackages[1]?.description || "",
+        deliveryTime: String(gigPackages[1]?.deliveryTime || "3"),
+        price: String(gigPackages[1]?.price || "30"),
+      },
+      premium: {
+        name: "Premium",
+        title: "Premium Package",
+        description: gigPackages[2]?.description || "",
+        deliveryTime: String(gigPackages[2]?.deliveryTime || "5"),
+        price: String(gigPackages[2]?.price || "60"),
+      },
+    });
+  }, [editId, gigsData?.data.pendingRequests, gigsData?.data.publishedGigs]);
+
+  const activeCategoryLabel = useMemo(() => {
+    if (isCustomCategory) return formData.customCategoryName.trim() || "Custom Category";
+    return categories.find((item) => item.slug === formData.categorySlug)?.name || formData.categoryName || "Category";
+  }, [categories, formData.categoryName, formData.categorySlug, formData.customCategoryName, isCustomCategory]);
+
+  const updatePackage = (field: keyof PackageData, value: string) => {
+    setPackages((current) => ({
+      ...current,
+      [activePackage]: {
+        ...current[activePackage],
+        [field]: value,
+      },
+    }));
+  };
+
+  const selectCategory = (category: CategoryItem) => {
+    setFormData((current) => ({
+      ...current,
+      categorySlug: category.slug,
+      categoryName: category.name,
+      customCategoryName: "",
+      customCategoryDescription: "",
+    }));
+  };
+
+  const pickImages = async () => {
+    if (displayedImages.length >= 4) {
+      Alert.alert("Limit reached", "You can upload up to 4 images.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: 4 - displayedImages.length,
     });
 
-    const [activePackage, setActivePackage] = useState<PackageType>('basic');
-    const [packages, setPackages] = useState<Record<PackageType, PackageData>>({
-        basic: { name: "", description: "", deliveryTime: "3 Days", revisions: "1", price: "" },
-        standard: { name: "", description: "", deliveryTime: "5 Days", revisions: "3", price: "" },
-        premium: { name: "", description: "", deliveryTime: "7 Days", revisions: "Unlimited", price: "" },
-    });
+    if (result.canceled) return;
 
-    useEffect(() => {
-        const loadGig = async () => {
-            if (!editId) return;
-            const payload = await mobileApi.getMyGigs();
-            const allGigs = [
-                ...(Array.isArray(payload.data.publishedGigs) ? payload.data.publishedGigs : []),
-                ...(Array.isArray(payload.data.pendingRequests) ? payload.data.pendingRequests : []),
-            ];
-            const currentGig = allGigs.find((item: any) => String(item._id || item.id) === String(editId));
-            if (!currentGig) return;
+    const selectedAssets = result.assets.slice(0, 4 - displayedImages.length).map((asset) => ({
+      uri: asset.uri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+    }));
+    setNewImages((current) => [...current, ...selectedAssets]);
+  };
 
-            const gigPackages = Array.isArray(currentGig.packages) ? currentGig.packages : [];
-            setFormData({
-                title: currentGig.title || "",
-                category: currentGig.categoryName || "General",
-                tags: "",
-                description: currentGig.description || "",
-                images: Array.isArray(currentGig.images) ? currentGig.images : [],
-            });
-            setPackages({
-                basic: {
-                    name: gigPackages[0]?.name || "Basic",
-                    description: gigPackages[0]?.description || "",
-                    deliveryTime: gigPackages[0]?.deliveryTime || "3 Days",
-                    revisions: "1",
-                    price: String(gigPackages[0]?.price || ""),
-                },
-                standard: {
-                    name: gigPackages[1]?.name || "Standard",
-                    description: gigPackages[1]?.description || "",
-                    deliveryTime: gigPackages[1]?.deliveryTime || "5 Days",
-                    revisions: "3",
-                    price: String(gigPackages[1]?.price || ""),
-                },
-                premium: {
-                    name: gigPackages[2]?.name || "Premium",
-                    description: gigPackages[2]?.description || "",
-                    deliveryTime: gigPackages[2]?.deliveryTime || "7 Days",
-                    revisions: "Unlimited",
-                    price: String(gigPackages[2]?.price || ""),
-                },
-            });
-        };
+  const handleUseCurrentLocation = async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow location access to use your current location.");
+      return;
+    }
 
-        void loadGig();
-    }, [editId]);
+    const current = await Location.getCurrentPositionAsync({});
+    const lat = current.coords.latitude;
+    const lng = current.coords.longitude;
+    setSelectedMapCoords({ lat, lng });
+    setSettingAddress(true);
+    try {
+      const address = await resolveAddressFromCoordinates(lat, lng);
+      setFormData((currentForm) => ({ ...currentForm, baseCity: address }));
+    } finally {
+      setSettingAddress(false);
+    }
+  };
 
-    // --- Handlers ---
-    const updatePackage = (field: keyof PackageData, value: string) => {
-        setPackages(prev => ({
-            ...prev,
-            [activePackage]: { ...prev[activePackage], [field]: value }
-        }));
-    };
+  const setCenterAsLocation = async () => {
+    setSettingAddress(true);
+    try {
+      const address = await resolveAddressFromCoordinates(selectedMapCoords.lat, selectedMapCoords.lng);
+      setFormData((current) => ({ ...current, baseCity: address }));
+    } finally {
+      setSettingAddress(false);
+    }
+  };
 
-    const pickImage = async () => {
-        if (formData.images.length >= 3) {
-            Alert.alert("Limit Reached", "You can only upload up to 3 images.");
-            return;
-        }
+  const validateCurrentStep = () => {
+    if (step === 1) {
+      if (!formData.title.trim()) {
+        Alert.alert("Required", "Please add a gig title.");
+        return false;
+      }
+      if (!formData.categorySlug) {
+        Alert.alert("Required", "Please select a category.");
+        return false;
+      }
+      if (isCustomCategory && !formData.customCategoryName.trim()) {
+        Alert.alert("Required", "Please enter a custom category name.");
+        return false;
+      }
+    }
 
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
-        });
+    if (step === 2) {
+      const hasInvalidPackage = PACKAGE_KEYS.some((key) => {
+        const item = packages[key];
+        return !item.description.trim() || !item.deliveryTime.trim() || !item.price.trim();
+      });
+      if (hasInvalidPackage) {
+        Alert.alert("Required", "Please complete all package details.");
+        return false;
+      }
+    }
 
-        if (!result.canceled) {
-            setFormData(prev => ({ ...prev, images: [...prev.images, result.assets[0].uri] }));
-        }
-    };
+    if (step === 3 && displayedImages.length < 1) {
+      Alert.alert("Required", "Please select at least one image.");
+      return false;
+    }
 
-    const handlePublish = async () => {
-        setLoading(true);
-        try {
-            const payload = new FormData();
-            payload.append("title", formData.title.trim());
-            payload.append("categorySlug", formData.category.toLowerCase().replace(/\s+/g, "-"));
-            payload.append("categoryName", formData.category.trim());
-            payload.append("description", formData.description.trim());
-            payload.append("requirements", formData.tags.trim());
-            payload.append("expertType", "solo");
-            payload.append("baseCity", "Location unavailable");
-            payload.append("locationLat", "0");
-            payload.append("locationLng", "0");
-            payload.append("travelRadiusKm", "25");
-            payload.append(
-                "packages",
-                JSON.stringify(
-                    (["basic", "standard", "premium"] as PackageType[]).map((key, index) => ({
-                        name: packages[key].name || ["Basic", "Standard", "Premium"][index],
-                        title: packages[key].name || ["Basic Package", "Standard Package", "Premium Package"][index],
-                        description: packages[key].description || "",
-                        deliveryTime: packages[key].deliveryTime || `${index + 1} Days`,
-                        price: Number(packages[key].price) || 0,
-                    }))
-                )
-            );
-            payload.append("images", JSON.stringify(formData.images.filter((item) => item.startsWith("http"))));
+    if (step === 4 && !formData.description.trim()) {
+      Alert.alert("Required", "Please add your service description.");
+      return false;
+    }
 
-            formData.images
-                .filter((item) => !item.startsWith("http"))
-                .forEach((uri, index) => {
-                    payload.append("images", {
-                        uri,
-                        name: `gig-image-${index}.jpg`,
-                        type: "image/jpeg",
-                    } as any);
-                });
+    if (step === 5 && !formData.baseCity.trim()) {
+      Alert.alert("Required", "Please set your service area.");
+      return false;
+    }
 
-            if (editId) {
-                await mobileApi.updateGig(editId, payload);
-            } else {
-                await mobileApi.createGig(payload);
-            }
-            setLoading(false);
-            Alert.alert("Success", editId ? "Your gig has been updated!" : "Your gig is now live!", [
-                { text: "OK", onPress: () => router.replace('/(provider-tabs)/services' as any) }
-            ]);
-        } catch (error) {
-            setLoading(false);
-            Alert.alert("Publish failed", error instanceof Error ? error.message : "Could not publish gig.");
-        }
-    };
+    return true;
+  };
 
-    const nextStep = () => {
-        if (step === 1 && !formData.title) return Alert.alert("Required", "Please add a title.");
-        if (step === 2 && !packages.basic.price) return Alert.alert("Required", "Basic price is mandatory.");
+  const submitGig = async () => {
+    setLoading(true);
+    try {
+      const payload = new FormData();
+      payload.append("title", formData.title.trim());
+      payload.append("categorySlug", formData.categorySlug);
+      payload.append("categoryName", activeCategoryLabel);
+      payload.append("customCategoryName", isCustomCategory ? formData.customCategoryName.trim() : "");
+      payload.append("customCategoryDescription", isCustomCategory ? formData.customCategoryDescription.trim() : "");
+      payload.append("expertType", formData.expertType);
+      payload.append("description", formData.description.trim());
+      payload.append("requirements", formData.requirements.trim());
+      payload.append("baseCity", formData.baseCity.trim());
+      payload.append("locationLat", String(selectedMapCoords.lat));
+      payload.append("locationLng", String(selectedMapCoords.lng));
+      payload.append("travelRadiusKm", String(convertMilesToKm(selectedRadius)));
+      payload.append(
+        "packages",
+        JSON.stringify(
+          PACKAGE_KEYS.map((key, index) => ({
+            name: PACKAGE_NAMES[index],
+            title: PACKAGE_TITLES[index],
+            description: packages[key].description.trim(),
+            deliveryTime: packages[key].deliveryTime.trim(),
+            price: Number(packages[key].price) || 0,
+          }))
+        )
+      );
+      payload.append("images", JSON.stringify(existingImageUrls));
+      newImages.forEach((asset, index) => {
+        payload.append("images", {
+          uri: asset.uri,
+          name: asset.fileName || `gig-image-${index + 1}.jpg`,
+          type: asset.mimeType || "image/jpeg",
+        } as any);
+      });
 
-        if (step < 4) setStep(step + 1);
-        else handlePublish();
-    };
+      if (editId) {
+        await updateGig({ id: editId, formData: payload }).unwrap();
+      } else {
+        await createGig(payload).unwrap();
+      }
 
-    // --- Sub-Components (Dynamic) ---
-    const ProgressBar = () => (
-        <View className="mb-6">
-            <View className="flex-row justify-between mb-2 px-1">
-                {['Overview', 'Pricing', 'Media', 'Publish'].map((label, idx) => (
-                    <Text key={idx} className={`text-[11px] font-bold uppercase tracking-wider ${step > idx ? 'text-[#2B84B1]' : 'text-gray-400'}`}>
-                        {label}
-                    </Text>
-                ))}
+      Alert.alert("Success", editId ? "Your gig has been updated." : "Your gig has been submitted.", [
+        { text: "OK", onPress: () => router.replace("/(provider-tabs)/services" as any) },
+      ]);
+    } catch (error) {
+      Alert.alert("Publish failed", error instanceof Error ? error.message : "Could not publish gig.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nextStep = () => {
+    if (!validateCurrentStep()) return;
+    if (step < 6) {
+      setStep((current) => current + 1);
+      return;
+    }
+    void submitGig();
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-white" edges={["top"]}>
+      <Header title={editId ? "Edit Gig" : "Create Gig"} onBack={() => (step > 1 ? setStep(step - 1) : router.back())} />
+
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
+        <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+          <ProgressBar step={step} />
+          {loadingGig ? (
+            <View className="py-24 items-center">
+              <ActivityIndicator color="#2286BE" size="large" />
+              <Text className="text-[#7C8B95] font-medium mt-4">Loading gig details...</Text>
             </View>
-            <View className="flex-row gap-x-1.5">
-                {[1, 2, 3, 4].map(idx => (
-                    <View key={idx} className={`flex-1 h-1.5 rounded-full ${step >= idx ? 'bg-[#2B84B1]' : 'bg-gray-100'}`} />
-                ))}
-            </View>
-        </View>
-    );
+          ) : null}
 
-    const Step1 = () => (
-        <View className="animate-in fade-in duration-500">
-            <InputField label="Service Title" value={formData.title} onChange={(val: any) => setFormData({ ...formData, title: val })} placeholder="I will build a custom AI agent..." maxLength={80} />
+          {!loadingGig && step === 1 ? (
+            <View>
+              <InputField
+                label="Service Title"
+                value={formData.title}
+                onChange={(value) => setFormData((current) => ({ ...current, title: value }))}
+                placeholder="I will provide deep house cleaning..."
+                maxLength={80}
+              />
 
-            <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Category</Text>
-            <TouchableOpacity className="w-full h-[58px] border border-gray-200 rounded-2xl px-4 flex-row items-center justify-between bg-white mb-6">
-                <Text className="text-[16px] text-[#2D3748] font-medium">{formData.category}</Text>
-                <Ionicons name="chevron-down" size={20} color="#A0AEC0" />
-            </TouchableOpacity>
-
-            <InputField label="Tags" value={formData.tags} onChange={(val: any) => setFormData({ ...formData, tags: val })} placeholder="AI, Automation, Python" />
-
-            <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Description</Text>
-            <TextInput
-                multiline
-                numberOfLines={6}
-                value={formData.description}
-                onChangeText={(val) => setFormData({ ...formData, description: val })}
-                className="w-full h-[140px] border border-gray-200 rounded-2xl p-4 text-[16px] bg-white text-[#2D3748]"
-                placeholder="Explain what you offer..."
-                textAlignVertical="top"
-            />
-        </View>
-    );
-
-    const Step2 = () => (
-        <View className="bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden mb-6">
-            <View className="flex-row bg-gray-50 border-b border-gray-100">
-                {(['basic', 'standard', 'premium'] as PackageType[]).map((tab) => (
+              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
+                {loadingCategories ? (
+                  <ActivityIndicator color="#2286BE" />
+                ) : (
+                  <>
+                    {categories.map((category) => (
+                      <TouchableOpacity
+                        key={category.id}
+                        onPress={() => selectCategory(category)}
+                        className={`px-4 py-3 rounded-[18px] mr-3 ${formData.categorySlug === category.slug ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}
+                      >
+                        <Text className={`font-bold ${formData.categorySlug === category.slug ? "text-white" : "text-[#1A2C42]"}`}>{category.name}</Text>
+                      </TouchableOpacity>
+                    ))}
                     <TouchableOpacity
-                        key={tab}
-                        onPress={() => setActivePackage(tab)}
-                        className={`flex-1 py-4 items-center ${activePackage === tab ? 'bg-white border-b-2 border-[#2B84B1]' : ''}`}
+                      onPress={() => setFormData((current) => ({ ...current, categorySlug: "create-your-own-category", categoryName: "" }))}
+                      className={`px-4 py-3 rounded-[18px] ${isCustomCategory ? "bg-[#1A2C42]" : "bg-white border border-gray-200"}`}
                     >
-                        <Text className={`font-bold capitalize ${activePackage === tab ? 'text-[#2B84B1]' : 'text-gray-400'}`}>{tab}</Text>
+                      <Text className={`font-bold ${isCustomCategory ? "text-white" : "text-[#1A2C42]"}`}>Custom</Text>
                     </TouchableOpacity>
-                ))}
-            </View>
+                  </>
+                )}
+              </ScrollView>
 
-            <View className="p-5">
-                <TextInput
-                    placeholder="Package Name (e.g. Silver Plan)"
-                    value={packages[activePackage].name}
-                    onChangeText={(val) => updatePackage('name', val)}
-                    className="text-[18px] font-bold text-[#1A2C42] border-b border-gray-50 pb-2 mb-4"
-                />
-                <TextInput
-                    placeholder="Describe specific features..."
+              {isCustomCategory ? (
+                <>
+                  <InputField
+                    label="Custom Category Name"
+                    value={formData.customCategoryName}
+                    onChange={(value) => setFormData((current) => ({ ...current, customCategoryName: value }))}
+                    placeholder="Example: Aquarium Cleaning"
+                  />
+                  <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">What is this category about?</Text>
+                  <TextInput
                     multiline
-                    value={packages[activePackage].description}
-                    onChangeText={(val) => updatePackage('description', val)}
-                    className="text-[14px] text-[#7C8B95] h-[70px] mb-4"
+                    numberOfLines={4}
+                    value={formData.customCategoryDescription}
+                    onChangeText={(value) => setFormData((current) => ({ ...current, customCategoryDescription: value }))}
+                    className="w-full h-[120px] border border-gray-200 rounded-2xl p-4 text-[16px] bg-white text-[#2D3748] mb-5"
+                    placeholder="Explain your custom category..."
+                    textAlignVertical="top"
+                  />
+                </>
+              ) : null}
+
+              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Expert Type</Text>
+              <View className="flex-row mb-6">
+                {[
+                  { key: "solo", label: "Solo", detail: "Handled by you alone" },
+                  { key: "team", label: "Team", detail: "Delivered with a team" },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.key}
+                    onPress={() => setFormData((current) => ({ ...current, expertType: option.key as "solo" | "team" }))}
+                    className={`flex-1 rounded-[20px] p-4 border mr-3 ${formData.expertType === option.key ? "border-[#2286BE] bg-[#EAF3FA]" : "border-gray-200 bg-white"}`}
+                  >
+                    <Text className="text-[16px] font-bold text-[#1A2C42]">{option.label}</Text>
+                    <Text className="text-[13px] text-[#7C8B95] mt-1">{option.detail}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {!loadingGig && step === 2 ? (
+            <View className="bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden mb-6">
+              <View className="flex-row bg-gray-50 border-b border-gray-100">
+                {PACKAGE_KEYS.map((key, index) => (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setActivePackage(key)}
+                    className={`flex-1 py-4 items-center ${activePackage === key ? "bg-white border-b-2 border-[#2B84B1]" : ""}`}
+                  >
+                    <Text className={`font-bold capitalize ${activePackage === key ? "text-[#2B84B1]" : "text-gray-400"}`}>{PACKAGE_NAMES[index]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View className="p-5">
+                <Text className="text-[18px] font-bold text-[#1A2C42] mb-4">{packages[activePackage].title}</Text>
+                <Text className="text-[12px] font-bold text-[#A0AEC0] mb-2 uppercase">Description</Text>
+                <TextInput
+                  placeholder="Detail what is included in this package..."
+                  multiline
+                  value={packages[activePackage].description}
+                  onChangeText={(value) => updatePackage("description", value)}
+                  className="text-[14px] text-[#1A2C42] h-[90px] mb-4 bg-gray-50 rounded-2xl p-4"
+                  textAlignVertical="top"
                 />
 
                 <View className="flex-row mb-6">
-                    <DropdownSelect label="Delivery" value={packages[activePackage].deliveryTime} />
-                    <View className="w-4" />
-                    <DropdownSelect label="Revisions" value={packages[activePackage].revisions} />
+                  <InputField
+                    compact
+                    label="Delivery Time"
+                    value={packages[activePackage].deliveryTime}
+                    onChange={(value) => updatePackage("deliveryTime", value)}
+                    placeholder="3"
+                    keyboardType="numeric"
+                  />
+                  <View className="w-4" />
+                  <InputField
+                    compact
+                    label="Price (USD)"
+                    value={packages[activePackage].price}
+                    onChange={(value) => updatePackage("price", value)}
+                    placeholder="25"
+                    keyboardType="numeric"
+                  />
                 </View>
-
-                <Text className="text-[12px] font-bold text-[#A0AEC0] mb-2 uppercase">Price ($)</Text>
-                <View className="flex-row items-center border border-gray-200 rounded-2xl px-4 bg-gray-50">
-                    <Text className="text-[20px] font-bold text-[#2B84B1] mr-2">$</Text>
-                    <TextInput
-                        keyboardType="numeric"
-                        value={packages[activePackage].price}
-                        onChangeText={(val) => updatePackage('price', val)}
-                        placeholder="0.00"
-                        className="flex-1 h-[55px] text-[22px] font-bold text-[#2B84B1]"
-                    />
-                </View>
+              </View>
             </View>
-        </View>
-    );
+          ) : null}
 
-    const Step3 = () => (
-        <View>
-            <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">Showcase your work</Text>
-            <Text className="text-[14px] text-[#7C8B95] mb-6">Add up to 3 high-quality images to attract buyers.</Text>
-
-            <TouchableOpacity
-                onPress={pickImage}
-                className="w-full h-[180px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center mb-6"
-            >
+          {!loadingGig && step === 3 ? (
+            <View>
+              <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">Gallery</Text>
+              <Text className="text-[14px] text-[#7C8B95] mb-6">Upload at least one and up to four images.</Text>
+              <TouchableOpacity
+                onPress={pickImages}
+                className="w-full h-[170px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center mb-6"
+              >
                 <Ionicons name="cloud-upload" size={36} color="#2B84B1" />
-                <Text className="font-bold text-[#1A2C42] mt-2">Upload Images</Text>
-            </TouchableOpacity>
+                <Text className="font-bold text-[#1A2C42] mt-2">Select Images</Text>
+              </TouchableOpacity>
 
-            <View className="flex-row flex-wrap gap-4">
-                {formData.images.map((img, i) => (
-                    <View key={i} className="w-[100px] h-[80px] rounded-xl bg-gray-200 relative">
-                        {/* Image display would go here with <Image source={{uri: img}} /> */}
-                        <View className="absolute -top-2 -right-2 bg-red-500 rounded-full">
-                            <Ionicons name="close-circle" size={24} color="white" onPress={() => {
-                                const newImgs = [...formData.images];
-                                newImgs.splice(i, 1);
-                                setFormData({ ...formData, images: newImgs });
-                            }} />
-                        </View>
-                    </View>
+              <View className="flex-row flex-wrap gap-4">
+                {displayedImages.map((image, index) => (
+                  <View key={`${image}-${index}`} className="w-[100px] h-[80px] rounded-xl bg-gray-200 relative overflow-hidden">
+                    <Image source={{ uri: image }} className="w-full h-full" resizeMode="cover" />
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (index < existingImageUrls.length) {
+                          setExistingImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                        } else {
+                          const fileIndex = index - existingImageUrls.length;
+                          setNewImages((current) => current.filter((_, itemIndex) => itemIndex !== fileIndex));
+                        }
+                      }}
+                      className="absolute top-1 right-1 bg-black/55 rounded-full"
+                    >
+                      <Ionicons name="close-circle" size={22} color="white" />
+                    </TouchableOpacity>
+                  </View>
                 ))}
+              </View>
             </View>
-        </View>
-    );
+          ) : null}
 
-    return (
-        <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-            <Header onBack={() => step > 1 ? setStep(step - 1) : router.back()} />
+          {!loadingGig && step === 4 ? (
+            <View>
+              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Description</Text>
+              <TextInput
+                multiline
+                numberOfLines={6}
+                value={formData.description}
+                onChangeText={(value) => setFormData((current) => ({ ...current, description: value }))}
+                className="w-full h-[160px] border border-gray-200 rounded-2xl p-4 text-[16px] bg-white text-[#2D3748] mb-5"
+                placeholder="Describe your gig and why clients should book you..."
+                textAlignVertical="top"
+              />
+              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Client Requirements</Text>
+              <TextInput
+                multiline
+                numberOfLines={5}
+                value={formData.requirements}
+                onChangeText={(value) => setFormData((current) => ({ ...current, requirements: value }))}
+                className="w-full h-[130px] border border-gray-200 rounded-2xl p-4 text-[16px] bg-white text-[#2D3748]"
+                placeholder="Tell the client what you need before starting..."
+                textAlignVertical="top"
+              />
+            </View>
+          ) : null}
 
-            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-                <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-                    <ProgressBar />
-                    {step === 1 && <Step1 />}
-                    {step === 2 && <Step2 />}
-                    {step === 3 && <Step3 />}
-                    {step === 4 && <Step4 />}
-                </ScrollView>
-            </KeyboardAvoidingView>
+          {!loadingGig && step === 5 ? (
+            <View>
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className="text-[14px] font-bold text-[#1A2C42] ml-1">Service Area</Text>
+                <TouchableOpacity onPress={() => void handleUseCurrentLocation()} className="bg-[#EAF3FA] rounded-full px-4 py-2">
+                  <Text className="text-[#2286BE] font-bold text-[12px]">Use Current Location</Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                value={formData.baseCity}
+                onChangeText={(value) => setFormData((current) => ({ ...current, baseCity: value }))}
+                placeholder="Banani, Dhaka, Bangladesh"
+                className="bg-white rounded-[18px] px-4 py-4 text-[15px] mb-4"
+              />
+              <MapboxLocationPicker token={mapboxToken} initialCenter={selectedMapCoords} onCenterChange={setSelectedMapCoords} />
+              <TouchableOpacity onPress={() => void setCenterAsLocation()} className="mt-3 bg-white border border-gray-200 rounded-[16px] px-4 py-3 self-start">
+                <Text className="font-bold text-[#2286BE]">{settingAddress ? "Setting..." : "Set Center As Location"}</Text>
+              </TouchableOpacity>
 
-            <Footer
-                loading={loading}
-                label={step === 4 ? 'Confirm & Publish' : 'Save & Continue'}
-                onPress={nextStep}
-            />
-        </SafeAreaView>
-    );
+              <Text className="text-[14px] font-bold text-[#1A2C42] mt-6 mb-3 ml-1">Travel Radius</Text>
+              <View className="flex-row flex-wrap">
+                {RADIUS_OPTIONS.map((radius) => (
+                  <TouchableOpacity
+                    key={radius}
+                    onPress={() => setSelectedRadius(radius)}
+                    className={`px-4 py-3 rounded-[18px] mr-3 mb-3 ${selectedRadius === radius ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}
+                  >
+                    <Text className={`font-bold ${selectedRadius === radius ? "text-white" : "text-[#1A2C42]"}`}>Within {radius} miles</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {!loadingGig && step === 6 ? (
+            <View className="items-center py-6">
+              <View className="w-24 h-24 bg-green-50 rounded-full items-center justify-center mb-6">
+                <Ionicons name="checkmark-circle" size={60} color="#55A06F" />
+              </View>
+              <Text className="text-[26px] font-black text-[#1A2C42] mb-3 text-center">Ready to publish</Text>
+              <Text className="text-[15px] text-[#7C8B95] text-center leading-[24px] px-4">
+                Review your details once more before submitting your gig.
+              </Text>
+
+              <View className="w-full bg-[#F8FAFC] rounded-[24px] p-5 mt-8">
+                <SummaryRow label="Title" value={formData.title || "Untitled gig"} />
+                <SummaryRow label="Category" value={activeCategoryLabel} />
+                <SummaryRow label="Expert Type" value={formData.expertType === "team" ? "Team" : "Solo"} />
+                <SummaryRow label="Images" value={`${displayedImages.length} selected`} />
+                <SummaryRow label="Location" value={formData.baseCity || "Not set"} />
+                <SummaryRow label="Radius" value={`${selectedRadius} miles`} />
+              </View>
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Footer loading={loading} label={step === 6 ? (editId ? "Update Gig" : "Publish Gig") : "Save & Continue"} onPress={nextStep} />
+    </SafeAreaView>
+  );
 }
 
-// --- Helper Components (For Clean Code) ---
-
-const InputField = ({ label, value, onChange, placeholder, maxLength }: any) => (
-    <View className="mb-5">
-        <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">{label}</Text>
-        <TextInput
-            placeholder={placeholder}
-            value={value}
-            onChangeText={onChange}
-            maxLength={maxLength}
-            className="w-full h-[58px] border border-gray-200 rounded-2xl px-4 text-[16px] bg-white font-medium text-[#2D3748]"
-        />
-        {maxLength && <Text className="text-[11px] text-[#A0AEC0] text-right mt-1">{value.length}/{maxLength}</Text>}
+function ProgressBar({ step }: { step: number }) {
+  return (
+    <View className="mb-6">
+      <View className="flex-row justify-between mb-2 px-1">
+        {["Basics", "Pricing", "Gallery", "Details", "Location", "Publish"].map((label, index) => (
+          <Text key={label} className={`text-[11px] font-bold uppercase tracking-wider ${step > index ? "text-[#2B84B1]" : "text-gray-400"}`}>
+            {label}
+          </Text>
+        ))}
+      </View>
+      <View className="flex-row gap-x-1.5">
+        {[1, 2, 3, 4, 5, 6].map((index) => (
+          <View key={index} className={`flex-1 h-1.5 rounded-full ${step >= index ? "bg-[#2B84B1]" : "bg-gray-100"}`} />
+        ))}
+      </View>
     </View>
-);
+  );
+}
 
-const DropdownSelect = ({ label, value }: any) => (
-    <View className="flex-1">
-        <Text className="text-[12px] font-bold text-[#A0AEC0] mb-1 uppercase tracking-tighter">{label}</Text>
-        <TouchableOpacity className="h-[52px] border border-gray-200 rounded-xl flex-row items-center justify-between px-3 bg-white">
-            <Text className="font-semibold text-[#1A2C42]">{value}</Text>
-            <Ionicons name="chevron-down" size={14} color="#A0AEC0" />
-        </TouchableOpacity>
-    </View>
-);
-
-const Header = ({ onBack }: any) => (
+function Header({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
     <View className="px-6 py-3 flex-row items-center border-b border-gray-50">
-        <TouchableOpacity onPress={onBack} className="w-10 h-10 bg-gray-50 rounded-full items-center justify-center mr-4">
-            <Ionicons name="arrow-back" size={20} color="#1A2C42" />
-        </TouchableOpacity>
-        <Text className="text-[20px] font-bold text-[#1A2C42]">Create Gig</Text>
+      <TouchableOpacity onPress={onBack} className="w-10 h-10 bg-gray-50 rounded-full items-center justify-center mr-4">
+        <Ionicons name="arrow-back" size={20} color="#1A2C42" />
+      </TouchableOpacity>
+      <Text className="text-[20px] font-bold text-[#1A2C42]">{title}</Text>
     </View>
-);
+  );
+}
 
-const Footer = ({ label, onPress, loading }: any) => (
+function Footer({ label, onPress, loading }: { label: string; onPress: () => void; loading: boolean }) {
+  return (
     <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-8 border-t border-gray-50 shadow-2xl">
-        <TouchableOpacity
-            disabled={loading}
-            onPress={onPress}
-            className="w-full h-[60px] bg-[#2B84B1] rounded-2xl items-center justify-center flex-row"
-        >
-            {loading ? <ActivityIndicator color="white" /> : <Text className="text-white text-[17px] font-bold">{label}</Text>}
-        </TouchableOpacity>
+      <TouchableOpacity disabled={loading} onPress={onPress} className="w-full h-[60px] bg-[#2B84B1] rounded-2xl items-center justify-center flex-row">
+        {loading ? <ActivityIndicator color="white" /> : <Text className="text-white text-[17px] font-bold">{label}</Text>}
+      </TouchableOpacity>
     </View>
-);
+  );
+}
 
-const Step4 = () => (
-    <View className="items-center py-6">
-        <View className="w-24 h-24 bg-green-50 rounded-full items-center justify-center mb-6">
-            <Ionicons name="checkmark-circle" size={60} color="#55A06F" />
-        </View>
-        <Text className="text-[26px] font-black text-[#1A2C42] mb-3 text-center">Ready to go!</Text>
-        <Text className="text-[15px] text-[#7C8B95] text-center leading-[24px] px-6">
-            Review your details. Once you publish, buyers can start ordering your services immediately.
-        </Text>
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-row justify-between py-2">
+      <Text className="text-[#7C8B95] font-semibold">{label}</Text>
+      <Text className="text-[#1A2C42] font-bold flex-1 text-right ml-4">{value}</Text>
     </View>
-);
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  compact = false,
+  keyboardType = "default",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  maxLength?: number;
+  compact?: boolean;
+  keyboardType?: "default" | "numeric";
+}) {
+  return (
+    <View className={`mb-5 ${compact ? "flex-1" : ""}`}>
+      <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">{label}</Text>
+      <TextInput
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChange}
+        maxLength={maxLength}
+        keyboardType={keyboardType}
+        className="w-full h-[58px] border border-gray-200 rounded-2xl px-4 text-[16px] bg-white font-medium text-[#2D3748]"
+      />
+      {maxLength ? <Text className="text-[11px] text-[#A0AEC0] text-right mt-1">{value.length}/{maxLength}</Text> : null}
+    </View>
+  );
+}

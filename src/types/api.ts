@@ -26,6 +26,21 @@ export type AppUser = {
   reviewCount?: number;
   payoutVerificationStatus?: string;
   savedServiceIds?: string[];
+  walletBalance?: number;
+  totalEarnings?: number;
+  totalWithdrawn?: number;
+  payoutInfo?: {
+    accountHolderName?: string;
+    bankAccountNumber?: string;
+    routingNumber?: string;
+    bankName?: string;
+    accountType?: "checking" | "savings" | "";
+    nidFrontImageUrl?: string;
+    nidBackImageUrl?: string;
+    submittedAt?: string | null;
+    reviewedAt?: string | null;
+    rejectionReason?: string;
+  };
 };
 
 export type LoginResponse = ApiEnvelope<{
@@ -125,6 +140,12 @@ export type OrderSummary = {
   revisionRequestNote?: string;
   clientRating?: number | null;
   clientReview?: string;
+  revisionResponseNote?: string;
+  revisionRequestedAt?: string | null;
+  revisionRespondedAt?: string | null;
+  createdAt?: string | null;
+  completedAt?: string | null;
+  isRequestedOrder?: boolean;
   client: {
     id: string;
     name: string;
@@ -144,6 +165,123 @@ export type OrderSummary = {
     title: string;
     images: string[];
   };
+};
+
+export type DashboardData = {
+  revenue?: {
+    totalEarnings?: number;
+    walletBalance?: number;
+    totalWithdrawn?: number;
+  };
+  sellerLevel?: string;
+  orders?: {
+    totalOrders?: number;
+    pendingOrders?: number;
+    activeOrders?: number;
+    completedOrders?: number;
+    completionRate?: number;
+  };
+  ratings?: {
+    averageRating?: number;
+    reviewCount?: number;
+  };
+  earningsAnalytics?: {
+    name?: string;
+    earnings?: number;
+  }[];
+  pendingRequests?: Record<string, unknown>[];
+};
+
+export type ClientDashboardData = {
+  orders?: {
+    totalOrders?: number;
+    activeOrders?: number;
+    pendingOrders?: number;
+    inProgressOrders?: number;
+    underReviewOrders?: number;
+    completedOrders?: number;
+    completionRate?: number;
+  };
+  inbox?: {
+    unreadMessages?: number;
+  };
+  recentOrders?: Record<string, unknown>[];
+};
+
+export type FaqItem = {
+  id: string;
+  question: string;
+  answer: string;
+  isActive?: boolean;
+  sortOrder?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type WithdrawalSummary = {
+  id: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "paid";
+  note?: string;
+  requestedAt?: string | null;
+  reviewedAt?: string | null;
+  processedAt?: string | null;
+};
+
+export type WithdrawalBalance = {
+  availableBalance?: number;
+  pendingWithdrawalAmount?: number;
+  totalEarnings?: number;
+  totalWithdrawn?: number;
+};
+
+export type SupportMessage = {
+  id: string;
+  fullName: string;
+  email: string;
+  subject: string;
+  message: string;
+  status?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  resolvedAt?: string | null;
+};
+
+export type ServiceRequestSummary = {
+  id: string;
+  requestNumber: string;
+  categorySlug: string;
+  categoryName: string;
+  serviceAddress: string;
+  serviceLocationLat?: number | null;
+  serviceLocationLng?: number | null;
+  description: string;
+  preferredDate?: string | null;
+  preferredTime: string;
+  budget: number;
+  imageUrls?: string[];
+  status: "open" | "accepted" | "cancelled";
+  acceptedAt?: string | null;
+  distanceKm?: number | null;
+  client: {
+    id: string;
+    name: string;
+    avatar?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
+  acceptedProvider?: {
+    id: string;
+    name: string;
+    avatar?: string;
+    sellerLevel?: string;
+    rating?: number;
+  } | null;
+  linkedOrderId?: string | null;
+  linkedOrderNumber?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type ConversationSummary = {

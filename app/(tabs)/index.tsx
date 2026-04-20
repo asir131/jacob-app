@@ -1,33 +1,26 @@
-import { useAuth } from "@/src/contexts/AuthContext";
-import { mobileApi } from "@/src/lib/api";
-import { formatCurrency } from "@/src/lib/formatters";
-import type { CategoryItem, PublicServiceCard } from "@/src/types/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import { Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import { formatCurrency } from "@/src/lib/formatters";
+import {
+  useGetCategoriesQuery,
+  useGetPublicServicesQuery,
+} from "@/src/store/services/apiSlice";
 
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { unreadCount } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [services, setServices] = useState<PublicServiceCard[]>([]);
-
-  useEffect(() => {
-    const load = async () => {
-      const [categoryPayload, servicePayload] = await Promise.all([
-        mobileApi.getCategories(),
-        mobileApi.getPublicServices("page=1&limit=6&categorySlug=all"),
-      ]);
-      setCategories(categoryPayload.data.slice(0, 3));
-      setServices(servicePayload.data.items || []);
-    };
-
-    void load();
-  }, []);
+  const { data: categoryPayload } = useGetCategoriesQuery();
+  const { data: servicePayload } = useGetPublicServicesQuery({ page: 1, limit: 6, categorySlug: "all" });
+  const categories = (categoryPayload?.data || []).slice(0, 3);
+  const services = servicePayload?.data.items || [];
 
   return (
     <View className="flex-1 bg-white">
@@ -56,13 +49,13 @@ export default function HomePage() {
 
           <TouchableOpacity onPress={() => router.push("/notifications")} className="w-10 h-10 rounded-full bg-gray-50 items-center justify-center border border-gray-100 ml-4 relative">
             <Ionicons name="notifications-outline" size={22} color="#1A2C42" />
+            {unreadCount ? <View className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#EF4444]" /> : null}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
       <ScrollView className="flex-1 bg-[#FAFCFD]" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
         <View style={{ height: 40 }} />
-
         <View className="px-6 pt-2 pb-6">
           <Text className="text-[12px] font-bold tracking-[0.15em] text-[#7C8B95] uppercase mb-3">
             HELLO {`${user?.firstName || "Client"} ${user?.lastName || ""}`.trim()}
@@ -86,6 +79,23 @@ export default function HomePage() {
           </View>
         </View>
 
+        <View className="px-6 mb-8">
+          <View className="bg-[#1A2C42] rounded-[28px] p-5">
+            <Text className="text-white text-[22px] font-black leading-[28px]">Need something custom?</Text>
+            <Text className="text-white/70 text-[14px] mt-2 leading-[22px]">
+              Post a request with the live map so nearby providers can respond to your exact location.
+            </Text>
+            <View className="flex-row mt-5">
+              <TouchableOpacity onPress={() => router.push("/post-request")} className="bg-white rounded-[18px] px-5 py-4 mr-3">
+                <Text className="font-bold text-[#1A2C42]">Post Request</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/client-requests" as any)} className="bg-white/10 border border-white/15 rounded-[18px] px-5 py-4">
+                <Text className="font-bold text-white">Track Requests</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         <View className="px-6 mb-12 flex-row justify-between items-center">
           {categories.map((category) => (
             <View key={category.id} className="items-center">
@@ -98,7 +108,6 @@ export default function HomePage() {
               <Text className="text-[14px] font-semibold text-[#4A5568]">{category.name}</Text>
             </View>
           ))}
-
           <View className="items-center">
             <TouchableOpacity onPress={() => router.push("/categories")} className="w-[58px] h-[58px] rounded-full bg-gray-50 border border-gray-100 items-center justify-center mb-3">
               <Ionicons name="arrow-forward" size={26} color="#718096" />
@@ -118,7 +127,6 @@ export default function HomePage() {
               <Ionicons name="chevron-forward" size={12} color="#4A5568" />
             </TouchableOpacity>
           </View>
-
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-6">
             {services.map((item) => (
               <TouchableOpacity key={item.id} onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })} className="w-[172px] mr-5">
@@ -138,6 +146,21 @@ export default function HomePage() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+
+        <View className="px-6 mb-10">
+          <TouchableOpacity onPress={() => router.push("/client-saved-services")} className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm shadow-gray-100 flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <View className="w-12 h-12 rounded-full bg-[#FFF4E8] items-center justify-center mr-4">
+                <Ionicons name="heart" size={22} color="#F59E0B" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[17px] font-bold text-[#1A2C42]">Saved Services</Text>
+                <Text className="text-[13px] text-[#7C8B95] mt-1">See your bookmarked providers and services</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

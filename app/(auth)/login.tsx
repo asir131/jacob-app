@@ -97,11 +97,11 @@ export default function LoginScreen() {
                         {/* Password Input */}
                         <View>
                             <Text className="text-[14px] font-bold text-[#A0AEC0] mb-2 ml-1">
-                                New Password
+                                Password
                             </Text>
                             <View className="w-full h-[60px] border-2 border-[#A0AEC0] rounded-[24px] px-6 flex-row items-center">
                                 <TextInput
-                                    placeholder="Enter new password"
+                                    placeholder="Enter your password"
                                     placeholderTextColor="#A0AEC0"
                                     secureTextEntry={!showPassword}
                                     value={password}

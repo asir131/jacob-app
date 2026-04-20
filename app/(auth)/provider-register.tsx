@@ -1,4 +1,3 @@
-import { ApiError, mobileApi } from "@/src/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -15,6 +14,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSignupMutation } from "@/src/store/services/apiSlice";
 
 export default function ProviderRegisterScreen() {
     const router = useRouter();
@@ -32,7 +32,7 @@ export default function ProviderRegisterScreen() {
 
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [acceptPrivacy, setAcceptPrivacy] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [signup, { isLoading: loading }] = useSignupMutation();
 
     const handleSignup = async () => {
         if (!fullName.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -46,24 +46,21 @@ export default function ProviderRegisterScreen() {
         }
 
         const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
-        setLoading(true);
         try {
-            await mobileApi.signup({
+            await signup({
                 firstName,
                 lastName: rest.join(" "),
                 email: email.trim(),
                 password,
                 role: "provider",
-            });
+            }).unwrap();
             router.push({
                 pathname: "/(auth)/otp-verification",
                 params: { email: email.trim(), role: "provider", mode: "signup" },
             });
         } catch (error) {
-            const message = error instanceof ApiError ? error.message : "Provider signup failed.";
+            const message = error instanceof Error ? error.message : "Provider signup failed.";
             Alert.alert("Could not create provider account", message);
-        } finally {
-            setLoading(false);
         }
     };
 
