@@ -1,5 +1,5 @@
 import ImageImport from "@/assets/ImageImport";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
     Image,
@@ -12,9 +12,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OTPSuccessScreen() {
     const router = useRouter();
+    const { role = "client" } = useLocalSearchParams<{ role?: string }>();
 
-    const handleGoToReset = () => {
-        router.push("/(auth)/reset-password");
+    const handleContinue = () => {
+        router.replace(role === "provider" ? "/(auth)/login?role=provider" : "/(auth)/login");
     };
 
     return (
@@ -41,17 +42,17 @@ export default function OTPSuccessScreen() {
                         OTP Verification{"\n"}Successful
                     </Text>
                     <Text className="text-[16px] text-[#A0AEC0] text-center mt-6 font-medium">
-                        You can now reset your password
+                        Your account is verified. You can now sign in.
                     </Text>
                 </View>
 
                 {/* Action Button */}
                 <TouchableOpacity
-                    onPress={handleGoToReset}
+                    onPress={handleContinue}
                     className="w-full h-[60px] bg-[#2B84B1] rounded-[32px] items-center justify-center shadow-lg shadow-[#2B84B1]/40"
                 >
                     <Text className="text-white text-[18px] font-bold">
-                        GO TO PASSWORD RESET
+                        GO TO SIGN IN
                     </Text>
                 </TouchableOpacity>
             </ScrollView>

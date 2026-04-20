@@ -1,8 +1,11 @@
+import { ApiError, mobileApi } from "@/src/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -29,10 +32,39 @@ export default function ProviderRegisterScreen() {
 
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleSignup = () => {
-        // Proceed to onboarding wizard
-        router.push("/(provider-setup)/wizard" as any);
+    const handleSignup = async () => {
+        if (!fullName.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+            Alert.alert("Missing information", "Full name, email and password are required.");
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            Alert.alert("Password mismatch", "Password and confirm password must match.");
+            return;
+        }
+
+        const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
+        setLoading(true);
+        try {
+            await mobileApi.signup({
+                firstName,
+                lastName: rest.join(" "),
+                email: email.trim(),
+                password,
+                role: "provider",
+            });
+            router.push({
+                pathname: "/(auth)/otp-verification",
+                params: { email: email.trim(), role: "provider", mode: "signup" },
+            });
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : "Provider signup failed.";
+            Alert.alert("Could not create provider account", message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const InputField = ({ label, placeholder, value, onChange, secureTextEntry = false, showToggle = null, onToggle = null, keyboardType = 'default' }: any) => (
@@ -165,11 +197,11 @@ export default function ProviderRegisterScreen() {
                     {/* Sign Up Button */}
                     <TouchableOpacity
                         onPress={handleSignup}
-                        style={{ opacity: (acceptTerms && acceptPrivacy) ? 1 : 0.6 }}
-                        disabled={!acceptTerms || !acceptPrivacy}
+                        style={{ opacity: (acceptTerms && acceptPrivacy && !loading) ? 1 : 0.6 }}
+                        disabled={!acceptTerms || !acceptPrivacy || loading}
                         className="w-full h-[64px] bg-[#2B84B1] rounded-[32px] items-center justify-center shadow-lg shadow-[#2B84B1]/40 mb-6"
                     >
-                        <Text className="text-white text-[18px] font-bold">Create Account</Text>
+                        {loading ? <ActivityIndicator color="white" /> : <Text className="text-white text-[18px] font-bold">Create Account</Text>}
                     </TouchableOpacity>
 
                     {/* Social Login Section */}

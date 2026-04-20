@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { mobileApi } from "@/src/lib/api";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -23,6 +24,7 @@ interface PackageData {
 
 export default function CreateServicePage() {
     const router = useRouter();
+    const { editId } = useLocalSearchParams<{ editId?: string }>();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
 
@@ -41,6 +43,53 @@ export default function CreateServicePage() {
         standard: { name: "", description: "", deliveryTime: "5 Days", revisions: "3", price: "" },
         premium: { name: "", description: "", deliveryTime: "7 Days", revisions: "Unlimited", price: "" },
     });
+
+    useEffect(() => {
+        const loadGig = async () => {
+            if (!editId) return;
+            const payload = await mobileApi.getMyGigs();
+            const allGigs = [
+                ...(Array.isArray(payload.data.publishedGigs) ? payload.data.publishedGigs : []),
+                ...(Array.isArray(payload.data.pendingRequests) ? payload.data.pendingRequests : []),
+            ];
+            const currentGig = allGigs.find((item: any) => String(item._id || item.id) === String(editId));
+            if (!currentGig) return;
+
+            const gigPackages = Array.isArray(currentGig.packages) ? currentGig.packages : [];
+            setFormData({
+                title: currentGig.title || "",
+                category: currentGig.categoryName || "General",
+                tags: "",
+                description: currentGig.description || "",
+                images: Array.isArray(currentGig.images) ? currentGig.images : [],
+            });
+            setPackages({
+                basic: {
+                    name: gigPackages[0]?.name || "Basic",
+                    description: gigPackages[0]?.description || "",
+                    deliveryTime: gigPackages[0]?.deliveryTime || "3 Days",
+                    revisions: "1",
+                    price: String(gigPackages[0]?.price || ""),
+                },
+                standard: {
+                    name: gigPackages[1]?.name || "Standard",
+                    description: gigPackages[1]?.description || "",
+                    deliveryTime: gigPackages[1]?.deliveryTime || "5 Days",
+                    revisions: "3",
+                    price: String(gigPackages[1]?.price || ""),
+                },
+                premium: {
+                    name: gigPackages[2]?.name || "Premium",
+                    description: gigPackages[2]?.description || "",
+                    deliveryTime: gigPackages[2]?.deliveryTime || "7 Days",
+                    revisions: "Unlimited",
+                    price: String(gigPackages[2]?.price || ""),
+                },
+            });
+        };
+
+        void loadGig();
+    }, [editId]);
 
     // --- Handlers ---
     const updatePackage = (field: keyof PackageData, value: string) => {
@@ -70,13 +119,55 @@ export default function CreateServicePage() {
 
     const handlePublish = async () => {
         setLoading(true);
-        // Simulate API Call
-        setTimeout(() => {
+        try {
+            const payload = new FormData();
+            payload.append("title", formData.title.trim());
+            payload.append("categorySlug", formData.category.toLowerCase().replace(/\s+/g, "-"));
+            payload.append("categoryName", formData.category.trim());
+            payload.append("description", formData.description.trim());
+            payload.append("requirements", formData.tags.trim());
+            payload.append("expertType", "solo");
+            payload.append("baseCity", "Location unavailable");
+            payload.append("locationLat", "0");
+            payload.append("locationLng", "0");
+            payload.append("travelRadiusKm", "25");
+            payload.append(
+                "packages",
+                JSON.stringify(
+                    (["basic", "standard", "premium"] as PackageType[]).map((key, index) => ({
+                        name: packages[key].name || ["Basic", "Standard", "Premium"][index],
+                        title: packages[key].name || ["Basic Package", "Standard Package", "Premium Package"][index],
+                        description: packages[key].description || "",
+                        deliveryTime: packages[key].deliveryTime || `${index + 1} Days`,
+                        price: Number(packages[key].price) || 0,
+                    }))
+                )
+            );
+            payload.append("images", JSON.stringify(formData.images.filter((item) => item.startsWith("http"))));
+
+            formData.images
+                .filter((item) => !item.startsWith("http"))
+                .forEach((uri, index) => {
+                    payload.append("images", {
+                        uri,
+                        name: `gig-image-${index}.jpg`,
+                        type: "image/jpeg",
+                    } as any);
+                });
+
+            if (editId) {
+                await mobileApi.updateGig(editId, payload);
+            } else {
+                await mobileApi.createGig(payload);
+            }
             setLoading(false);
-            Alert.alert("Success", "Your gig is now live!", [
+            Alert.alert("Success", editId ? "Your gig has been updated!" : "Your gig is now live!", [
                 { text: "OK", onPress: () => router.replace('/(provider-tabs)/services' as any) }
             ]);
-        }, 2000);
+        } catch (error) {
+            setLoading(false);
+            Alert.alert("Publish failed", error instanceof Error ? error.message : "Could not publish gig.");
+        }
     };
 
     const nextStep = () => {

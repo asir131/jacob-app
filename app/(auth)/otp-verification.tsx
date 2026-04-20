@@ -1,7 +1,10 @@
-import { useRouter } from "expo-router";
+import { ApiError, mobileApi } from "@/src/lib/api";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -14,9 +17,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OTPVerificationScreen() {
     const router = useRouter();
-    const [otp, setOtp] = useState(["", "", "", "", ""]);
-    const [timer, setTimer] = useState(20);
+    const { email = "", role = "client", mode = "signup" } = useLocalSearchParams<{ email?: string; role?: string; mode?: string }>();
+    const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+    const [timer, setTimer] = useState(60);
+    const [loading, setLoading] = useState(false);
     const inputRefs = [
+        useRef<TextInput>(null),
         useRef<TextInput>(null),
         useRef<TextInput>(null),
         useRef<TextInput>(null),
@@ -37,7 +43,7 @@ export default function OTPVerificationScreen() {
         setOtp(newOtp);
 
         // Move to next input if text is entered
-        if (text && index < 4) {
+        if (text && index < otp.length - 1) {
             inputRefs[index + 1].current?.focus();
         }
     };
@@ -54,10 +60,30 @@ export default function OTPVerificationScreen() {
         return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
     };
 
-    const handleContinue = () => {
-        // Handle OTP verification logic
-        console.log("OTP entered:", otp.join(""));
-        router.push("/(auth)/otp-success");
+    const handleContinue = async () => {
+        if (mode !== "signup") {
+            router.push("/(auth)/otp-success");
+            return;
+        }
+
+        if (!email || otp.join("").length !== 6) {
+            Alert.alert("Invalid OTP", "Please enter the 6 digit verification code.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await mobileApi.verifySignupOtp({ email, otp: otp.join("") });
+            router.push({
+                pathname: "/(auth)/otp-success",
+                params: { role },
+            });
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : "OTP verification failed.";
+            Alert.alert("Verification failed", message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -78,7 +104,9 @@ export default function OTPVerificationScreen() {
                             OTP Verification
                         </Text>
                         <Text className="text-[16px] text-[#7C8B95] text-center mt-4 leading-[24px] px-4 font-medium">
-                            Enter the otp sent to your email address to reset your old password
+                            {mode === "signup"
+                                ? `Enter the OTP sent to ${email || "your email"} to complete signup`
+                                : "Enter the otp sent to your email address to reset your old password"}
                         </Text>
                     </View>
 
@@ -105,12 +133,17 @@ export default function OTPVerificationScreen() {
 
                     {/* Action Button */}
                     <TouchableOpacity
+                        disabled={loading}
                         onPress={handleContinue}
                         className="w-full h-[68px] bg-[#2B84B1] rounded-[34px] items-center justify-center shadow-lg shadow-[#2B84B1]/40 mb-8"
                     >
-                        <Text className="text-white text-[18px] font-bold">
-                            CONTINUE
-                        </Text>
+                        {loading ? (
+                            <ActivityIndicator color="white" />
+                        ) : (
+                            <Text className="text-white text-[18px] font-bold">
+                                CONTINUE
+                            </Text>
+                        )}
                     </TouchableOpacity>
 
                     {/* Resend Section */}

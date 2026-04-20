@@ -11,7 +11,7 @@ export default function RoleSelection() {
 
     const roles = [
         {
-            id: 'specialist',
+            id: 'client',
             title: "Looking for a specialist",
             description: "To place any type of order to search for a performer",
             image: ImageImport.user_1,

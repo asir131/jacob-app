@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@/src/contexts/AuthContext";
 import { useState } from "react";
 import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,18 +8,21 @@ import { useRouter } from "expo-router";
 
 export default function SettingsPage() {
     const router = useRouter();
+    const { user, logout } = useAuth();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [pushEnabled, setPushEnabled] = useState(true);
     const [emailEnabled, setEmailEnabled] = useState(false);
 
-    const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null }: any) => (
+    const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null, onPress = null }: any) => (
         <TouchableOpacity
             className="flex-row items-center py-4 bg-white"
             activeOpacity={type === 'switch' ? 1 : 0.7}
             onPress={() => {
                 if (type === 'switch' && onChange) {
                     onChange(!value);
+                } else if (onPress) {
+                    onPress();
                 } else if (route) {
                     router.push(route);
                 }
@@ -74,14 +78,14 @@ export default function SettingsPage() {
                         }}
                     >
                         <Image
-                            source={{ uri: "https://i.pravatar.cc/150?u=joyboy" }}
+                            source={{ uri: user?.avatar || "https://i.pravatar.cc/150?u=joyboy" }}
                             className="w-[68px] h-[68px] rounded-full mr-4 bg-gray-100"
                         />
                         <View className="flex-1">
-                            <Text className="text-[20px] font-bold text-[#1A2C42] mb-0.5">Joyboy</Text>
-                            <Text className="text-[14px] text-[#7C8B95] font-medium mb-1.5">hello@joyboy.dev</Text>
+                            <Text className="text-[20px] font-bold text-[#1A2C42] mb-0.5">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User"}</Text>
+                            <Text className="text-[14px] text-[#7C8B95] font-medium mb-1.5">{user?.email || "Email unavailable"}</Text>
                             <View className="bg-[#EAF3FA] self-start px-3 py-1 rounded-full">
-                                <Text className="text-[#2B84B1] text-[12px] font-bold tracking-wide">PREMIUM</Text>
+                                <Text className="text-[#2B84B1] text-[12px] font-bold tracking-wide">{(user?.role || "client").toUpperCase()}</Text>
                             </View>
                         </View>
                         <View className="w-10 h-10 rounded-full bg-gray-50 items-center justify-center">
@@ -151,7 +155,15 @@ export default function SettingsPage() {
                 {/* Logout */}
                 <View className="px-6 mb-8">
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow icon="log-out-outline" label="Log Out" isDestructive={true} />
+                        <SettingsRow
+                            icon="log-out-outline"
+                            label="Log Out"
+                            isDestructive={true}
+                            onPress={async () => {
+                                await logout();
+                                router.replace("/(auth)");
+                            }}
+                        />
                     </View>
                     <Text className="text-[#A0AEC0] text-[12px] font-bold text-center mt-6 tracking-widest">
                         APP VERSION 1.0.0

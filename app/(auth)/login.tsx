@@ -1,9 +1,13 @@
 import ImageImport from "@/assets/ImageImport";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { ApiError } from "@/src/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -18,17 +22,28 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function LoginScreen() {
     const router = useRouter();
     const { role } = useLocalSearchParams();
-    const [userId, setUserId] = useState("");
+    const { loginWithPassword } = useAuth();
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleSignIn = () => {
-        // Handle sign in logic
-        if (role === 'provider') {
-            router.push("/(provider-setup)/wizard");
-        } else {
-            router.push("/(auth)/location-access");
+    const handleSignIn = async () => {
+        if (!email.trim() || !password.trim()) {
+            Alert.alert("Missing information", "Email and password are required.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const user = await loginWithPassword(email.trim(), password);
+            router.replace(user.role === "provider" ? "/(provider-tabs)" : "/(tabs)");
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : "Login failed. Please try again.";
+            Alert.alert("Sign in failed", message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -61,17 +76,19 @@ export default function LoginScreen() {
 
                     {/* Form Section */}
                     <View className="gap-y-6">
-                        {/* User ID Input */}
+                        {/* Email Input */}
                         <View>
                             <Text className="text-[14px] font-bold text-[#A0AEC0] mb-2 ml-1">
-                                User ID
+                                Email
                             </Text>
                             <View className="w-full h-[60px] border-2 border-[#A0AEC0] rounded-[24px] px-6 justify-center">
                                 <TextInput
-                                    placeholder="Enter your User ID"
+                                    placeholder="Enter your email"
                                     placeholderTextColor="#A0AEC0"
-                                    value={userId}
-                                    onChangeText={setUserId}
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    autoCapitalize="none"
+                                    keyboardType="email-address"
                                     className="text-[16px] text-[#2D3748] font-medium"
                                 />
                             </View>
@@ -124,12 +141,17 @@ export default function LoginScreen() {
 
                         {/* Sign In Button */}
                         <TouchableOpacity
+                            disabled={loading}
                             onPress={handleSignIn}
                             className="w-full h-[64px] bg-[#2B84B1] rounded-[32px] items-center justify-center shadow-lg shadow-[#2B84B1]/40 mt-4"
                         >
-                            <Text className="text-white text-[18px] font-bold">
-                                SIGN IN
-                            </Text>
+                            {loading ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <Text className="text-white text-[18px] font-bold">
+                                    SIGN IN
+                                </Text>
+                            )}
                         </TouchableOpacity>
 
                         {/* Social Login Section */}

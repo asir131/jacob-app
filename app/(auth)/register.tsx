@@ -1,9 +1,12 @@
 import ImageImport from "@/assets/ImageImport";
+import { ApiError, mobileApi } from "@/src/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -21,11 +24,34 @@ export default function RegisterScreen() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleSignUp = () => {
-        // Handle sign up logic
-        console.log("Signing up...");
-        router.push("/(auth)/location-access");
+    const handleSignUp = async () => {
+        const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
+        if (!firstName || !email.trim() || !password.trim()) {
+            Alert.alert("Missing information", "Full name, email and password are required.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await mobileApi.signup({
+                firstName,
+                lastName: rest.join(" "),
+                email: email.trim(),
+                password,
+                role: "client",
+            });
+            router.push({
+                pathname: "/(auth)/otp-verification",
+                params: { email: email.trim(), role: "client", mode: "signup" },
+            });
+        } catch (error) {
+            const message = error instanceof ApiError ? error.message : "Signup failed.";
+            Alert.alert("Could not create account", message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -117,12 +143,17 @@ export default function RegisterScreen() {
 
                         {/* Sign Up Button */}
                         <TouchableOpacity
+                            disabled={loading}
                             onPress={handleSignUp}
                             className="w-full h-[64px] bg-[#2B84B1] rounded-[32px] items-center justify-center shadow-lg shadow-[#2B84B1]/40 mt-4"
                         >
-                            <Text className="text-white text-[18px] font-bold">
-                                SIGN UP
-                            </Text>
+                            {loading ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <Text className="text-white text-[18px] font-bold">
+                                    SIGN UP
+                                </Text>
+                            )}
                         </TouchableOpacity>
 
                         {/* Social Login Section */}

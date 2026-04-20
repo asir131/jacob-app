@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
@@ -6,17 +7,20 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 export default function ProviderSettings() {
     const router = useRouter();
+    const { user, logout } = useAuth();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
     const [available, setAvailable] = useState(true);
 
-    const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null }: any) => (
+    const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null, onPress = null }: any) => (
         <TouchableOpacity
             className="flex-row items-center py-4 bg-white"
             activeOpacity={type === 'switch' ? 1 : 0.7}
             onPress={() => {
                 if (type === 'switch' && onChange) {
                     onChange(!value);
+                } else if (onPress) {
+                    onPress();
                 } else if (route) {
                     router.push(route);
                 }
@@ -52,10 +56,10 @@ export default function ProviderSettings() {
             <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
                 {/* Profile Widget */}
                 <View className="bg-white rounded-[24px] p-5 mb-8 border border-gray-100 shadow-sm shadow-gray-100 flex-row items-center">
-                    <Image source={{ uri: "https://i.pravatar.cc/150?u=joyboy" }} className="w-16 h-16 rounded-full mr-4 bg-gray-100" />
+                    <Image source={{ uri: user?.avatar || "https://i.pravatar.cc/150?u=joyboy" }} className="w-16 h-16 rounded-full mr-4 bg-gray-100" />
                     <View className="flex-1">
-                        <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">Joyboy Pro</Text>
-                        <Text className="text-[14px] text-[#7C8B95] font-medium">Level 2 Seller</Text>
+                        <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Provider"}</Text>
+                        <Text className="text-[14px] text-[#7C8B95] font-medium">{user?.sellerLevel || "Seller"}</Text>
                     </View>
                     <TouchableOpacity className="bg-[#EAF3FA] w-10 h-10 rounded-full items-center justify-center">
                         <Ionicons name="pencil" size={18} color="#2B84B1" />
@@ -100,7 +104,10 @@ export default function ProviderSettings() {
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="document-text-outline" label="Seller Guidelines" color="#2B84B1" route="/(provider)/seller-guidelines" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="log-out-outline" label="Log Out" isDestructive={true} />
+                        <SettingsRow icon="log-out-outline" label="Log Out" isDestructive={true} onPress={async () => {
+                            await logout();
+                            router.replace("/(auth)");
+                        }} />
                     </View>
                 </View>
             </ScrollView>
