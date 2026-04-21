@@ -11,7 +11,7 @@ const ICON_MAP: Record<string, { library: "ion" | "material"; name: string; bgCo
   beauty: { library: "ion", name: "sparkles", bgColor: "#DCCFFD", iconColor: "#553098" },
   plumbing: { library: "material", name: "pipe", bgColor: "#E2F2E4", iconColor: "#38A169" },
   appliance: { library: "material", name: "washing-machine", bgColor: "#B1EBF2", iconColor: "#008EA6" },
-  shifting: { library: "material", name: "truck-delivery", bgColor: "#FBB6CE", iconColor: "#B83280" },
+  shipping: { library: "material", name: "truck-delivery", bgColor: "#FBB6CE", iconColor: "#B83280" },
 };
 
 export default function CategoriesPage() {

@@ -55,7 +55,7 @@ export default function EarningsPage() {
             <TextInput placeholder="Amount" placeholderTextColor="#A0AEC0" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] text-[#1A2C42] mb-3" />
             <TextInput placeholder="Note (optional)" placeholderTextColor="#A0AEC0" value={note} onChangeText={setNote} className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] text-[#1A2C42] mb-4" />
             <TouchableOpacity onPress={() => void submitWithdrawal()} disabled={requesting} className="w-full bg-[#2B84B1] h-[56px] rounded-[16px] items-center justify-center flex-row">
-              {requesting ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-[16px]">Withdraw balance</Text>}
+              {requesting ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-[16px]">Withdraw Balance</Text>}
             </TouchableOpacity>
           </View>
           <Text className="text-[18px] font-bold text-[#1A2C42] mb-4">Transaction History</Text>

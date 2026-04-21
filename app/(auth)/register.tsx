@@ -23,13 +23,38 @@ export default function RegisterScreen() {
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [signup, { isLoading: loading }] = useSignupMutation();
+
+    const resolveSignupErrorMessage = (error: unknown) => {
+        const apiMessage =
+            typeof error === "object" && error !== null && "data" in error
+                ? (error as { data?: { message?: string } }).data?.message
+                : "";
+
+        if (typeof apiMessage === "string" && apiMessage.toLowerCase().includes("email already")) {
+            return "Email already in use";
+        }
+
+        return "Signup failed.";
+    };
 
     const handleSignUp = async () => {
         const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
-        if (!firstName || !email.trim() || !password.trim()) {
-            Alert.alert("Missing information", "Full name, email and password are required.");
+        if (!firstName || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+            Alert.alert("Missing information", "Full name, email, password and confirm password are required.");
+            return;
+        }
+
+        if (password.length < 8) {
+            Alert.alert("Weak password", "Password must be at least 8 characters long.");
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            Alert.alert("Password mismatch", "Password and confirm password must match.");
             return;
         }
 
@@ -46,7 +71,7 @@ export default function RegisterScreen() {
                 params: { email: email.trim(), role: "client", mode: "signup" },
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Signup failed.";
+            const message = resolveSignupErrorMessage(error);
             Alert.alert("Could not create account", message);
         }
     };
@@ -131,6 +156,29 @@ export default function RegisterScreen() {
                                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                     <Ionicons
                                         name={showPassword ? "eye-outline" : "eye-off-outline"}
+                                        size={24}
+                                        color="#A0AEC0"
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View>
+                            <Text className="text-[14px] font-bold text-[#A0AEC0] mb-2 ml-1">
+                                Confirm Password
+                            </Text>
+                            <View className="w-full h-[60px] border-2 border-[#A0AEC0] rounded-[24px] px-6 flex-row items-center">
+                                <TextInput
+                                    placeholder="Confirm password"
+                                    placeholderTextColor="#A0AEC0"
+                                    secureTextEntry={!showConfirmPassword}
+                                    value={confirmPassword}
+                                    onChangeText={setConfirmPassword}
+                                    className="flex-1 text-[16px] text-[#2D3748] font-medium"
+                                />
+                                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                                    <Ionicons
+                                        name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
                                         size={24}
                                         color="#A0AEC0"
                                     />

@@ -21,8 +21,8 @@ export default function ServiceDetailsPage() {
   const { isAuthenticated, updateProfile, user } = useAuth();
   const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
   const [createOrder, { isLoading: bookingLoading }] = useCreateOrderMutation();
-  const [saveService] = useSaveServiceMutation();
-  const [removeSavedService] = useRemoveSavedServiceMutation();
+  const [saveService, { isLoading: isSavingService }] = useSaveServiceMutation();
+  const [removeSavedService, { isLoading: isRemovingSavedService }] = useRemoveSavedServiceMutation();
   const service = data?.data || null;
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(0);
@@ -33,6 +33,7 @@ export default function ServiceDetailsPage() {
 
   const activePackage = useMemo(() => service?.packages?.[selectedPackage] || null, [selectedPackage, service]);
   const isSaved = Boolean(user?.savedServiceIds?.includes(service?.id || ""));
+  const isSaveActionLoading = isSavingService || isRemovingSavedService;
 
   const handleToggleSave = async () => {
     if (!service) return;
@@ -112,9 +113,24 @@ export default function ServiceDetailsPage() {
               <Text className="text-[16px] font-bold text-[#4A5568]">{service.provider.name}</Text>
             </View>
             <Text className="text-[32px] font-black text-[#2B84B1] leading-[32px]">{formatCurrency(service.avgPackagePrice)}</Text>
-            <TouchableOpacity onPress={() => void handleToggleSave()} className="mt-5 self-start bg-[#F8FAFC] px-4 py-2 rounded-full flex-row items-center">
-              <Ionicons name={isSaved ? "heart" : "heart-outline"} size={16} color="#2B84B1" />
-              <Text className="text-[#2B84B1] font-bold text-[13px] ml-2">{isSaved ? "Saved" : "Save Service"}</Text>
+            <TouchableOpacity
+              onPress={() => void handleToggleSave()}
+              disabled={isSaveActionLoading}
+              className={`mt-5 self-start px-4 py-2 rounded-full flex-row items-center ${isSaveActionLoading ? "bg-[#EAF3FA]" : "bg-[#F8FAFC]"}`}
+            >
+              {isSaveActionLoading ? (
+                <>
+                  <ActivityIndicator size="small" color="#2B84B1" />
+                  <Text className="text-[#2B84B1] font-bold text-[13px] ml-2">
+                    {isSaved ? "Removing..." : "Saving..."}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name={isSaved ? "heart" : "heart-outline"} size={16} color="#2B84B1" />
+                  <Text className="text-[#2B84B1] font-bold text-[13px] ml-2">{isSaved ? "Saved" : "Save Service"}</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>

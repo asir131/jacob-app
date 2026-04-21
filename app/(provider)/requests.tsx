@@ -11,30 +11,39 @@ import {
   useIgnoreServiceRequestMutation,
 } from "@/src/store/services/apiSlice";
 
+const kmToMiles = (km: number) => (km * 0.621371).toFixed(1);
+
 export default function ProviderRequestsPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const { data, isLoading, refetch } = useGetProviderServiceRequestsQuery({ page: 1, limit: 20, radiusKm: 30, search });
-  const [acceptServiceRequest] = useAcceptServiceRequestMutation();
-  const [ignoreServiceRequest] = useIgnoreServiceRequestMutation();
+  const [acceptServiceRequest, { isLoading: accepting }] = useAcceptServiceRequestMutation();
+  const [ignoreServiceRequest, { isLoading: ignoring }] = useIgnoreServiceRequestMutation();
   const items = data?.data.items || [];
 
   const acceptItem = async (id: string) => {
     try {
+      setActingRequestId(id);
       await acceptServiceRequest(id).unwrap();
       refetch();
       Alert.alert("Accepted", "Service request accepted successfully.");
     } catch (error) {
       Alert.alert("Accept failed", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setActingRequestId(null);
     }
   };
 
   const ignoreItem = async (id: string) => {
     try {
+      setActingRequestId(id);
       await ignoreServiceRequest(id).unwrap();
       refetch();
     } catch (error) {
       Alert.alert("Ignore failed", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setActingRequestId(null);
     }
   };
 
@@ -63,10 +72,30 @@ export default function ProviderRequestsPage() {
                 <Text className="text-[13px] font-bold text-[#2286BE]">{formatCurrency(item.budget)}</Text>
                 <Text className="text-[13px] text-[#7C8B95]">{formatDateLabel(item.preferredDate)} • {item.preferredTime}</Text>
               </View>
-              {typeof item.distanceKm === "number" ? <Text className="text-[12px] font-bold uppercase tracking-widest text-[#2286BE] mt-3">{item.distanceKm.toFixed(1)} km away</Text> : null}
+              {typeof item.distanceKm === "number" ? <Text className="text-[12px] font-bold uppercase tracking-widest text-[#2286BE] mt-3">{kmToMiles(item.distanceKm)} mi away</Text> : null}
               <View className="flex-row gap-x-3 mt-5">
-                <TouchableOpacity onPress={() => void ignoreItem(item.id)} className="flex-1 bg-[#F8FAFC] py-4 rounded-[18px] items-center"><Text className="font-bold text-[#1A2C42]">Ignore</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => void acceptItem(item.id)} className="flex-1 bg-[#2286BE] py-4 rounded-[18px] items-center"><Text className="font-bold text-white">Accept</Text></TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void ignoreItem(item.id)}
+                  disabled={ignoring && actingRequestId === item.id}
+                  className="flex-1 bg-[#F8FAFC] py-4 rounded-[18px] items-center justify-center"
+                >
+                  {ignoring && actingRequestId === item.id ? (
+                    <ActivityIndicator color="#1A2C42" />
+                  ) : (
+                    <Text className="font-bold text-[#1A2C42]">Ignore</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void acceptItem(item.id)}
+                  disabled={accepting && actingRequestId === item.id}
+                  className="flex-1 bg-[#2286BE] py-4 rounded-[18px] items-center justify-center"
+                >
+                  {accepting && actingRequestId === item.id ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="font-bold text-white">Accept</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
           )) : <View className="items-center justify-center py-20"><Ionicons name="document-text-outline" size={54} color="#CBD5E1" /><Text className="text-[20px] font-bold text-[#1A2C42] mt-4">No nearby requests</Text></View>}

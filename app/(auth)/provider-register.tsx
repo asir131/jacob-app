@@ -34,6 +34,19 @@ export default function ProviderRegisterScreen() {
     const [acceptPrivacy, setAcceptPrivacy] = useState(false);
     const [signup, { isLoading: loading }] = useSignupMutation();
 
+    const resolveSignupErrorMessage = (error: unknown) => {
+        const apiMessage =
+            typeof error === "object" && error !== null && "data" in error
+                ? (error as { data?: { message?: string } }).data?.message
+                : "";
+
+        if (typeof apiMessage === "string" && apiMessage.toLowerCase().includes("email already")) {
+            return "Email already in use";
+        }
+
+        return "Provider signup failed.";
+    };
+
     const handleSignup = async () => {
         if (!fullName.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
             Alert.alert("Missing information", "Full name, email and password are required.");
@@ -59,7 +72,7 @@ export default function ProviderRegisterScreen() {
                 params: { email: email.trim(), role: "provider", mode: "signup" },
             });
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Provider signup failed.";
+            const message = resolveSignupErrorMessage(error);
             Alert.alert("Could not create provider account", message);
         }
     };

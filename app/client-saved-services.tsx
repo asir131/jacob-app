@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Image, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -14,16 +15,20 @@ export default function ClientSavedServicesPage() {
   const router = useRouter();
   const { updateProfile, user } = useAuth();
   const { data, isLoading, refetch } = useGetSavedServicesQuery();
-  const [removeSavedService] = useRemoveSavedServiceMutation();
+  const [removeSavedService, { isLoading: removing }] = useRemoveSavedServiceMutation();
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const items = data?.data.items || [];
 
   const removeItem = async (gigId: string) => {
     try {
+      setRemovingId(gigId);
       const payload = await removeSavedService(gigId).unwrap();
       await updateProfile(payload.data.user || { savedServiceIds: (user?.savedServiceIds || []).filter((item) => item !== gigId) });
       refetch();
     } catch (error) {
       Alert.alert("Could not remove service", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -57,8 +62,16 @@ export default function ClientSavedServicesPage() {
                   <TouchableOpacity onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })} className="flex-1 bg-[#2286BE] py-4 rounded-[18px] items-center">
                     <Text className="text-white font-bold">View</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => void removeItem(item.id)} className="px-5 bg-[#FFF0F0] py-4 rounded-[18px] items-center">
-                    <Ionicons name="trash-outline" size={20} color="#FF4757" />
+                  <TouchableOpacity
+                    onPress={() => void removeItem(item.id)}
+                    disabled={removing && removingId === item.id}
+                    className="px-5 bg-[#FFF0F0] py-4 rounded-[18px] items-center justify-center min-w-[76px]"
+                  >
+                    {removing && removingId === item.id ? (
+                      <ActivityIndicator color="#FF4757" />
+                    ) : (
+                      <Ionicons name="trash-outline" size={20} color="#FF4757" />
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
