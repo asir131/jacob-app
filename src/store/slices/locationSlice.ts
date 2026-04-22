@@ -12,7 +12,7 @@ const DEFAULT_COORDS = { lat: 40.7128, lng: -74.006 };
 
 const initialState: LocationState = {
   city: "Dhaka, Bangladesh",
-  radius: 25,
+  radius: 15,
   coordinates: DEFAULT_COORDS,
 };
 

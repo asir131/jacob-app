@@ -63,6 +63,11 @@ export default function SavedAddressesPage() {
                             lat: typeof user?.locationLat === "number" ? user.locationLat : 40.7128,
                             lng: typeof user?.locationLng === "number" ? user.locationLng : -74.006,
                         }}
+                        interactive={false}
+                        height={220}
+                        badgeText="Saved address preview"
+                        loadingText="Loading address preview..."
+                        fallbackHintText="Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web."
                         onCenterChange={() => { }}
                     />
                 </View>

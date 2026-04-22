@@ -13,6 +13,7 @@ import type {
   FaqItem,
   PublicServiceCard,
   PublicServiceDetail,
+  PublicProviderProfile,
   ServiceRequestSummary,
   WithdrawalBalance,
   WithdrawalSummary,
@@ -133,6 +134,9 @@ export const apiSlice = createApi({
     }),
     getPublicServiceById: builder.query<ApiEnvelope<PublicServiceDetail>, string>({
       query: (id) => `/api/gigs/public/${id}`,
+    }),
+    getPublicProviderProfile: builder.query<ApiEnvelope<PublicProviderProfile>, string>({
+      query: (providerId) => `/api/profile/provider/${providerId}/public`,
     }),
     getClientDashboard: builder.query<ApiEnvelope<ClientDashboardData>, void>({
       query: () => "/api/orders/client/dashboard",
@@ -272,6 +276,56 @@ export const apiSlice = createApi({
         url: `/api/orders/client/${id}/request-revision`,
         method: "PATCH",
         body: { note },
+      }),
+      invalidatesTags: ["Orders"],
+    }),
+    cancelClientRevision: builder.mutation<ApiEnvelope<{ order: any }>, string>({
+      query: (id) => ({
+        url: `/api/orders/client/${id}/cancel-revision`,
+        method: "PATCH",
+      }),
+      invalidatesTags: ["Orders"],
+    }),
+    sendClientResolutionMessage: builder.mutation<
+      ApiEnvelope<{ conversationId?: string }>,
+      { id: string; text: string }
+    >({
+      query: ({ id, text }) => ({
+        url: `/api/orders/client/${id}/resolution-message`,
+        method: "POST",
+        body: { text },
+      }),
+      invalidatesTags: ["Orders", "Chats"],
+    }),
+    createClientCheckoutSession: builder.mutation<
+      ApiEnvelope<{ checkoutUrl?: string; sessionId?: string }>,
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `/api/orders/client/${id}/stripe-checkout`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Orders"],
+    }),
+    confirmClientCheckoutPayment: builder.mutation<
+      ApiEnvelope<{ order: any }>,
+      { id: string; sessionId: string }
+    >({
+      query: ({ id, sessionId }) => ({
+        url: `/api/orders/client/${id}/stripe-confirm`,
+        method: "POST",
+        body: { sessionId },
+      }),
+      invalidatesTags: ["Orders"],
+    }),
+    submitClientOrderReview: builder.mutation<
+      ApiEnvelope<{ order: any }>,
+      { id: string; rating: number; review?: string }
+    >({
+      query: ({ id, rating, review }) => ({
+        url: `/api/orders/client/${id}/review`,
+        method: "POST",
+        body: { rating, review },
       }),
       invalidatesTags: ["Orders"],
     }),
@@ -472,6 +526,20 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ["Gigs"],
     }),
+    deleteGig: builder.mutation<ApiEnvelope<unknown>, string>({
+      query: (id) => ({
+        url: `/api/gigs/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Gigs"],
+    }),
+    deleteGigRequest: builder.mutation<ApiEnvelope<unknown>, string>({
+      query: (id) => ({
+        url: `/api/gigs/requests/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Gigs"],
+    }),
     login: builder.mutation<
       ApiEnvelope<{ accessToken: string; refreshToken: string; user: AppUser }>,
       { email: string; password: string }
@@ -518,6 +586,7 @@ export const {
   useGetCategoriesQuery,
   useGetPublicServicesQuery,
   useGetPublicServiceByIdQuery,
+  useGetPublicProviderProfileQuery,
   useGetClientDashboardQuery,
   useGetProviderDashboardQuery,
   useGetClientServiceRequestsQuery,
@@ -533,6 +602,11 @@ export const {
   useDeclineProviderOrderMutation,
   useSubmitProviderDeliveryMutation,
   useRequestClientRevisionMutation,
+  useCancelClientRevisionMutation,
+  useSendClientResolutionMessageMutation,
+  useCreateClientCheckoutSessionMutation,
+  useConfirmClientCheckoutPaymentMutation,
+  useSubmitClientOrderReviewMutation,
   useFinalizeClientOrderMutation,
   useGetConversationsQuery,
   useEnsureConversationByOrderMutation,
@@ -556,6 +630,8 @@ export const {
   useGetMyGigsQuery,
   useCreateGigMutation,
   useUpdateGigMutation,
+  useDeleteGigMutation,
+  useDeleteGigRequestMutation,
   useLoginMutation,
   useLogoutMutation,
   useSignupMutation,

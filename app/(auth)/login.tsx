@@ -9,12 +9,14 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -50,15 +52,19 @@ export default function LoginScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             <StatusBar style="dark" />
-            <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                className="flex-1"
-            >
-                <ScrollView
-                    className="flex-1 px-8"
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 40 }}
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+                    className="flex-1"
                 >
+                    <ScrollView
+                        className="flex-1 px-8"
+                        showsVerticalScrollIndicator={false}
+                        keyboardDismissMode="on-drag"
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={{ paddingBottom: 40 }}
+                    >
                     {/* Logo Section */}
                     <View className="items-center mt-12 mb-10">
                         <Image
@@ -174,13 +180,14 @@ export default function LoginScreen() {
                             <Text className="text-[#7C8B95] font-medium">
                                 Don&apos;t have an account?{" "}
                             </Text>
-                            <TouchableOpacity onPress={() => router.push(role === 'provider' ? "/(auth)/provider-register" : "/(auth)/register")}>
+                            <TouchableOpacity onPress={() => router.push(role === 'provider' ? "/(auth)/register?role=provider" : "/(auth)/register")}>
                                 <Text className="text-[#2B84B1] font-bold">Sign Up</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
         </SafeAreaView>
     );
 }

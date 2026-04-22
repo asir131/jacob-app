@@ -118,6 +118,68 @@ export type PublicServiceDetail = {
   }[];
 };
 
+export type PublicProviderProfile = {
+  provider?: {
+    id?: string;
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    bio?: string;
+    experienceLevel?: string;
+    sellerLevel?: string;
+    level?: string;
+    rating?: number;
+    reviewCount?: number;
+    completedOrders?: number;
+    totalOrders?: number;
+    completionRate?: number;
+    recommendRate?: number;
+    location?: string;
+    joinedAt?: string;
+  };
+  gigs?: {
+    id?: string;
+    title?: string;
+    categoryName?: string;
+    categorySlug?: string;
+    images?: string[];
+    startingPrice?: number;
+    avgPackagePrice?: number;
+    provider?: {
+      id?: string;
+      name?: string;
+      avatar?: string;
+      rating?: number;
+      sellerLevel?: string;
+      level?: string;
+    };
+  }[];
+  reviews?: {
+    id?: string;
+    orderId?: string;
+    gigId?: string | null;
+    gigName?: string;
+    rating?: number;
+    review?: string;
+    createdAt?: string | null;
+    client?: {
+      id?: string;
+      name?: string;
+      avatar?: string;
+    };
+  }[];
+  performance?: {
+    responseRate?: number;
+    deliveredOnTime?: number;
+    orderCompletion?: number;
+  };
+  skills?: string[];
+};
+
 export type OrderSummary = {
   id: string;
   orderNumber: string;

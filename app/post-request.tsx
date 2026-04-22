@@ -175,7 +175,14 @@ export default function PostRequestPage() {
 
         <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Service Location</Text>
         <TextInput value={serviceAddress} onChangeText={setServiceAddress} placeholder="Enter exact location" className="bg-white rounded-[18px] px-4 py-4 text-[15px] mb-4" />
-        <MapboxLocationPicker token={mapboxToken} initialCenter={selectedMapCoords} onCenterChange={setSelectedMapCoords} />
+        <MapboxLocationPicker
+          token={mapboxToken}
+          initialCenter={selectedMapCoords}
+          onCenterChange={setSelectedMapCoords}
+          badgeText="Move map and set center as service location"
+          loadingText="Loading interactive map..."
+          fallbackHintText="Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web."
+        />
         <View className="flex-row justify-between mt-3 mb-6">
           <TouchableOpacity onPress={() => void handleUseCurrentLocation()} className="bg-white border border-gray-200 rounded-[16px] px-4 py-3">
             <Text className="font-bold text-[#2286BE]">Use Current Location</Text>

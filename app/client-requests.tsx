@@ -1,35 +1,96 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
 import { useGetClientServiceRequestsQuery } from "@/src/store/services/apiSlice";
 
 const STATUS_OPTIONS = ["all", "open", "accepted", "cancelled"] as const;
 
+const resolveLinkedOrderParam = (value: unknown, linkedOrderNumber?: string) => {
+  if (typeof linkedOrderNumber === "string" && linkedOrderNumber.trim()) {
+    return linkedOrderNumber.trim();
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (value && typeof value === "object") {
+    const linkedOrder = value as { _id?: string; id?: string };
+    if (typeof linkedOrder._id === "string" && linkedOrder._id.trim()) return linkedOrder._id.trim();
+    if (typeof linkedOrder.id === "string" && linkedOrder.id.trim()) return linkedOrder.id.trim();
+  }
+
+  return "";
+};
+
 export default function ClientRequestsPage() {
   const router = useRouter();
+  const { socket } = useSocketNotifications();
   const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>("all");
-  const { data, isLoading } = useGetClientServiceRequestsQuery({ page: 1, limit: 20, status });
+  const { data, isLoading, refetch } = useGetClientServiceRequestsQuery(
+    { page: 1, limit: 20, status },
+    {
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    }
+  );
   const items = data?.data.items || [];
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRealtimeRefresh = (payload?: { data?: { orderId?: string; notificationType?: string } }) => {
+      const notificationType = String(payload?.data?.notificationType || "");
+      const relevantType =
+        notificationType === "service_request_accepted" ||
+        notificationType === "service_request_cancelled" ||
+        notificationType === "order_created_from_request" ||
+        notificationType === "order_accepted" ||
+        notificationType === "order_declined" ||
+        notificationType === "order_delivery_submitted";
+
+      if (relevantType || !notificationType) {
+        void refetch();
+      }
+    };
+
+    socket.on("notification:new", handleRealtimeRefresh);
+
+    return () => {
+      socket.off("notification:new", handleRealtimeRefresh);
+    };
+  }, [refetch, socket]);
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
-      <View className="px-6 py-4 flex-row items-center bg-white shadow-sm shadow-black/5 z-10">
+      <View className="px-6 py-3 flex-row items-center bg-white shadow-sm shadow-black/5 z-10">
         <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center bg-gray-50 rounded-full mr-4">
           <Ionicons name="arrow-back" size={20} color="#1A2C42" />
         </TouchableOpacity>
         <Text className="text-[20px] font-bold text-[#1A2C42]">My Requests</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-6 pt-5 mb-1" contentContainerStyle={{ paddingRight: 24 }}>
+      <View className="px-6 pt-2 pb-1 flex-row items-start">
         {STATUS_OPTIONS.map((option) => (
-          <TouchableOpacity key={option} onPress={() => setStatus(option)} className={`px-4 py-3 rounded-[18px] mr-3 ${status === option ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}>
-            <Text className={`font-bold capitalize ${status === option ? "text-white" : "text-[#1A2C42]"}`}>{option}</Text>
+          <TouchableOpacity
+            key={option}
+            onPress={() => setStatus(option)}
+            className={`px-3 py-1 rounded-[8px] mr-2 ${status === option ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}
+          >
+            <Text className={`font-bold text-[11px] leading-[12px] capitalize ${status === option ? "text-white" : "text-[#1A2C42]"}`}>{option}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
       {isLoading ? (
         <View className="flex-1 items-center justify-center"><ActivityIndicator color="#2286BE" size="large" /></View>
       ) : (
@@ -52,9 +113,20 @@ export default function ClientRequestsPage() {
                 <Text className="text-[13px] text-[#7C8B95]">{formatDateLabel(item.preferredDate)} • {item.preferredTime}</Text>
               </View>
               {item.acceptedProvider?.name ? <Text className="text-[14px] font-bold text-[#1A2C42] mt-4">Accepted By: {item.acceptedProvider.name}</Text> : null}
-              {item.linkedOrderId ? (
-                <TouchableOpacity onPress={() => router.push({ pathname: "/booking-details", params: { id: item.linkedOrderId, role: "client" } })} className="mt-3 self-start bg-[#2286BE] px-4 py-3 rounded-[16px]">
-                  <Text className="text-white font-bold text-[13px]">Open Linked Order</Text>
+              {resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber) ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/booking-details",
+                      params: {
+                        id: resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber),
+                        role: "client",
+                      },
+                    })
+                  }
+                  className="mt-3 self-start bg-[#2286BE] px-4 py-3 rounded-[16px]"
+                >
+                  <Text className="text-white font-bold text-[13px]">Track Order</Text>
                 </TouchableOpacity>
               ) : null}
             </View>

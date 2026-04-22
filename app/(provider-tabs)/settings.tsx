@@ -8,7 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 export default function ProviderSettings() {
     const router = useRouter();
-    const { user, logout } = useAuth();
+    const { setRole, user, logout } = useAuth();
     const { unreadCount, socketConnected } = useSocketNotifications();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
@@ -68,6 +68,30 @@ export default function ProviderSettings() {
                     </TouchableOpacity>
                 </View>
 
+                {/* Quick Navigation */}
+                <View className="mb-8">
+                    <Text className="text-[13px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-3 ml-1">
+                        Quick Navigation
+                    </Text>
+                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
+                        <SettingsRow
+                            icon="swap-horizontal-outline"
+                            label="Switch to Buying"
+                            color="#2B84B1"
+                            onPress={async () => {
+                                await setRole("client");
+                                router.replace("/(tabs)");
+                            }}
+                        />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="grid-outline" label="Dashboard" color="#2B84B1" route="/(provider-tabs)" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="briefcase-outline" label="My Orders" color="#2B84B1" route="/(provider-tabs)/orders" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="layers-outline" label="My Gig" color="#2B84B1" route="/(provider-tabs)/services" />
+                    </View>
+                </View>
+
                 {/* Seller Controls */}
                 <View className="mb-8">
                     <Text className="text-[13px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-3 ml-1">
@@ -92,7 +116,9 @@ export default function ProviderSettings() {
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
                         <SettingsRow icon="person-outline" label="Business Profile" color="#2B84B1" route="/(profile)/personal-info" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
+                        <SettingsRow icon="wallet-outline" label="Payout Information" color="#2B84B1" route="/(profile)/payout-information" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="shield-checkmark-outline" label="Security" color="#2B84B1" route="/(profile)/security" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="notifications-outline" label="Live Notifications" color="#2B84B1" value={unreadCount ? `${unreadCount} new` : socketConnected ? "Connected" : "Offline"} route="/notifications" />
                     </View>

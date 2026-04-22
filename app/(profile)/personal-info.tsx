@@ -27,7 +27,7 @@ const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
 
 export default function PersonalInfoPage() {
   const router = useRouter();
-  const { role, updateProfile, user } = useAuth();
+  const { logout, role, updateProfile, user } = useAuth();
   const [saveProfile, { isLoading: saving }] = useUpdateProfileMutation();
   const [uploadAvatarMutation] = useUploadAvatarMutation();
   const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
@@ -248,6 +248,40 @@ export default function PersonalInfoPage() {
   const mapCenter = isProvider
     ? { lat: form.serviceLocationLat, lng: form.serviceLocationLng }
     : { lat: form.locationLat, lng: form.locationLng };
+  const payoutStatus = user?.payoutVerificationStatus || "unverified";
+
+  const providerProfileActions = [
+    {
+      label: "Security",
+      description: "Update password and account access settings.",
+      icon: "shield-checkmark-outline" as const,
+      route: "/(profile)/security",
+      color: "#EAF3FA",
+      iconColor: "#2286BE",
+    },
+    {
+      label: "Payout Info",
+      description: `Verification status: ${payoutStatus}`,
+      icon: "wallet-outline" as const,
+      route: "/(profile)/payout-information",
+      color: payoutStatus === "verified" ? "#EAF6ED" : payoutStatus === "rejected" ? "#FFF1F2" : "#FFF7ED",
+      iconColor: payoutStatus === "verified" ? "#55A06F" : payoutStatus === "rejected" ? "#FF4757" : "#D97706",
+    },
+  ];
+
+  const handleSignOut = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/(auth)/login");
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
@@ -282,6 +316,28 @@ export default function PersonalInfoPage() {
           </>
         ) : null}
 
+        {isProvider ? (
+          <View className="mb-6">
+            <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-1">Provider Tools</Text>
+            {providerProfileActions.map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                onPress={() => router.push(item.route as never)}
+                className="bg-white rounded-[22px] px-5 py-5 border border-gray-100 shadow-sm shadow-black/5 mb-4 flex-row items-center"
+              >
+                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: item.color }}>
+                  <Ionicons name={item.icon} size={22} color={item.iconColor} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[16px] font-bold text-[#1A2C42]">{item.label}</Text>
+                  <Text className="text-[13px] text-[#7C8B95] mt-1">{item.description}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
         <View className="mb-5">
           <View className="flex-row justify-between items-center mb-2 ml-1">
             <Text className="text-[14px] font-bold text-[#7C8B95]">
@@ -302,6 +358,9 @@ export default function PersonalInfoPage() {
           <MapboxLocationPicker
             token={mapboxToken}
             initialCenter={mapCenter}
+            badgeText={isProvider ? "Move map and set center as service location" : "Move map and set center as your location"}
+            loadingText={isProvider ? "Loading service area map..." : "Loading location map..."}
+            fallbackHintText="Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web."
             onCenterChange={(coords) =>
               setForm((current) => ({
                 ...current,
@@ -318,6 +377,12 @@ export default function PersonalInfoPage() {
 
         {!isProvider ? (
           <InputRow label="Preferred Language" value={form.preferredLanguage} icon="language-outline" field="preferredLanguage" />
+        ) : null}
+
+        {isProvider ? (
+          <TouchableOpacity onPress={handleSignOut} className="mb-8 border border-[#FF4757] rounded-[20px] py-4 items-center">
+            <Text className="text-[#FF4757] font-bold text-[16px]">Sign Out</Text>
+          </TouchableOpacity>
         ) : null}
       </ScrollView>
 

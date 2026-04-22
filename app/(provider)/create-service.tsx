@@ -7,12 +7,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -355,8 +357,19 @@ export default function CreateServicePage() {
     <SafeAreaView className="flex-1 bg-white" edges={["top"]}>
       <Header title={editId ? "Edit Gig" : "Create Gig"} onBack={() => (step > 1 ? setStep(step - 1) : router.back())} />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-        <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+          className="flex-1"
+        >
+          <ScrollView
+            className="flex-1 px-6 pt-4"
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 130 }}
+          >
           <ProgressBar step={step} />
           {loadingGig ? (
             <View className="py-24 items-center">
@@ -563,7 +576,14 @@ export default function CreateServicePage() {
                 placeholder="Banani, Dhaka, Bangladesh"
                 className="bg-white rounded-[18px] px-4 py-4 text-[15px] mb-4"
               />
-              <MapboxLocationPicker token={mapboxToken} initialCenter={selectedMapCoords} onCenterChange={setSelectedMapCoords} />
+              <MapboxLocationPicker
+                token={mapboxToken}
+                initialCenter={selectedMapCoords}
+                onCenterChange={setSelectedMapCoords}
+                badgeText="Move map and set center as service location"
+                loadingText="Loading service area map..."
+                fallbackHintText="Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web."
+              />
               <TouchableOpacity onPress={() => void setCenterAsLocation()} className="mt-3 bg-white border border-gray-200 rounded-[16px] px-4 py-3 self-start">
                 <Text className="font-bold text-[#2286BE]">{settingAddress ? "Setting..." : "Set Center As Location"}</Text>
               </TouchableOpacity>
@@ -603,8 +623,9 @@ export default function CreateServicePage() {
               </View>
             </View>
           ) : null}
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
 
       <Footer loading={loading} label={step === 6 ? (editId ? "Update Gig" : "Publish Gig") : "Save & Continue"} onPress={nextStep} />
     </SafeAreaView>

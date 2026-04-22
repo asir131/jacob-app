@@ -6,6 +6,11 @@ type Props = {
   token?: string;
   initialCenter: { lat: number; lng: number };
   onCenterChange: (coords: { lat: number; lng: number }) => void;
+  interactive?: boolean;
+  height?: number;
+  badgeText?: string;
+  loadingText?: string;
+  fallbackHintText?: string;
 };
 
 const escapeHtml = (value: string) =>
@@ -16,8 +21,17 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const buildHtml = (lat: number, lng: number, token?: string) => {
+const buildHtml = (
+  lat: number,
+  lng: number,
+  token?: string,
+  interactive = true,
+  badgeText = "Move map and set center as location",
+  loadingText = "Loading map..."
+) => {
   const safeToken = token ? escapeHtml(token) : "";
+  const safeBadgeText = escapeHtml(badgeText);
+  const safeLoadingText = escapeHtml(loadingText);
 
   return `
 <!DOCTYPE html>
@@ -52,6 +66,7 @@ const buildHtml = (lat: number, lng: number, token?: string) => {
       #map {
         position: absolute;
         inset: 0;
+        ${interactive ? "" : "pointer-events: none;"}
       }
       .pin-wrap {
         position: absolute;
@@ -107,14 +122,15 @@ const buildHtml = (lat: number, lng: number, token?: string) => {
       .leaflet-top.leaflet-right {
         top: 10px;
         right: 10px;
+        ${interactive ? "" : "display: none;"}
       }
     </style>
   </head>
   <body>
     <div id="map"></div>
-    <div id="status" class="status">Loading map...</div>
+    <div id="status" class="status">${safeLoadingText}</div>
     <div class="pin-wrap"><div class="pin"></div></div>
-    <div class="badge">Move map and set center as location</div>
+    <div class="badge">${safeBadgeText}</div>
 
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -164,10 +180,22 @@ const buildHtml = (lat: number, lng: number, token?: string) => {
           attributionControl: false,
         }).setView([initialCenter.lat, initialCenter.lng], 13);
 
-        L.control.zoom({ position: "topright" }).addTo(map);
+        if (${interactive ? "true" : "false"}) {
+          L.control.zoom({ position: "topright" }).addTo(map);
+        }
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
         }).addTo(map);
+
+        if (!${interactive ? "true" : "false"}) {
+          map.dragging.disable();
+          map.touchZoom.disable();
+          map.doubleClickZoom.disable();
+          map.scrollWheelZoom.disable();
+          map.boxZoom.disable();
+          map.keyboard.disable();
+          if (map.tap) map.tap.disable();
+        }
 
         activeMap = map;
         centerReader = () => map.getCenter();
@@ -195,7 +223,18 @@ const buildHtml = (lat: number, lng: number, token?: string) => {
             attributionControl: false,
           });
 
-          map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
+          if (${interactive ? "true" : "false"}) {
+            map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
+          }
+
+          if (!${interactive ? "true" : "false"}) {
+            map.dragPan.disable();
+            map.scrollZoom.disable();
+            map.boxZoom.disable();
+            map.doubleClickZoom.disable();
+            map.touchZoomRotate.disable();
+            map.keyboard.disable();
+          }
 
           activeMap = map;
           centerReader = () => map.getCenter();
@@ -228,7 +267,16 @@ const buildHtml = (lat: number, lng: number, token?: string) => {
 `;
 };
 
-export function MapboxLocationPicker({ token, initialCenter, onCenterChange }: Props) {
+export function MapboxLocationPicker({
+  token,
+  initialCenter,
+  onCenterChange,
+  interactive = true,
+  height = 260,
+  badgeText = "Move map and set center as location",
+  loadingText = "Loading map...",
+  fallbackHintText = "Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web.",
+}: Props) {
   const webViewRef = useRef<WebView>(null);
   const initialMountCenterRef = useRef(initialCenter);
   const lastCenterRef = useRef(initialCenter);
@@ -237,9 +285,12 @@ export function MapboxLocationPicker({ token, initialCenter, onCenterChange }: P
       buildHtml(
         initialMountCenterRef.current.lat,
         initialMountCenterRef.current.lng,
-        token
+        token,
+        interactive,
+        badgeText,
+        loadingText
       ),
-    [token]
+    [badgeText, interactive, loadingText, token]
   );
 
   useEffect(() => {
@@ -258,7 +309,7 @@ export function MapboxLocationPicker({ token, initialCenter, onCenterChange }: P
   return (
     <View
       className="rounded-[24px] overflow-hidden border border-gray-200 bg-white"
-      style={{ height: 260 }}
+      style={{ height }}
     >
       <WebView
         ref={webViewRef}
@@ -300,7 +351,7 @@ export function MapboxLocationPicker({ token, initialCenter, onCenterChange }: P
       {!token ? (
         <View className="absolute left-3 right-3 top-3 rounded-xl bg-white/90 px-3 py-2">
           <Text className="text-[12px] font-medium text-[#7C8B95]">
-            Using fallback map tiles. Add `EXPO_PUBLIC_MAPBOX_TOKEN` for the same Mapbox styling as web.
+            {fallbackHintText}
           </Text>
         </View>
       ) : null}

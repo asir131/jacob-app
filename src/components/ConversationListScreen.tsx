@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -17,13 +17,46 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { formatDateLabel } from "@/src/lib/formatters";
 import { useGetConversationsQuery } from "@/src/store/services/apiSlice";
 
+const getQueryErrorMessage = (error: unknown, fallback: string) => {
+  if (!error || typeof error !== "object") return fallback;
+
+  const value = error as {
+    status?: number | string;
+    data?: { message?: string };
+    error?: string;
+  };
+
+  if (typeof value.data?.message === "string" && value.data.message.trim()) {
+    return value.data.message;
+  }
+
+  if (typeof value.error === "string" && value.error.trim()) {
+    return value.error;
+  }
+
+  if (value.status === 401) return "Your session expired. Please log in again.";
+
+  return fallback;
+};
+
 export function ConversationListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useGetConversationsQuery();
+  const { data, isLoading, isFetching, error, refetch } = useGetConversationsQuery(undefined, {
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    pollingInterval: 15000,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
+
   const filtered = useMemo(() => {
     const conversations = data?.data || [];
     let items = conversations;
@@ -38,6 +71,7 @@ export function ConversationListScreen() {
       return haystacks.some((value) => value.toLowerCase().includes(query));
     });
   }, [activeTab, data?.data, search]);
+  const errorMessage = getQueryErrorMessage(error, "We could not load your conversations.");
 
   return (
     <View className="flex-1 bg-white">
@@ -99,6 +133,14 @@ export function ConversationListScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#2286BE" />
         </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-8 py-16">
+          <Text className="text-[18px] font-bold text-[#1A2C42] mb-2">Could not load conversations</Text>
+          <Text className="text-center text-[#7C8B95] mb-6">{errorMessage}</Text>
+          <TouchableOpacity onPress={() => void refetch()} className="bg-[#2286BE] px-6 py-3 rounded-[16px]">
+            <Text className="text-white font-bold">{isFetching ? "Refreshing..." : "Try Again"}</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filtered}
@@ -113,6 +155,8 @@ export function ConversationListScreen() {
                     name: item.otherUser.name,
                     avatar: item.otherUser.avatar || "",
                     info: item.orderName || item.categoryName || "",
+                    blockedBy: item.blockedBy || "",
+                    targetUserId: item.otherUser.id,
                   },
                 })
               }

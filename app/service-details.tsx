@@ -1,39 +1,46 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
+import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { formatMilesFromKm } from "@/src/lib/distance";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
 import {
-  useCreateOrderMutation,
   useGetPublicServiceByIdQuery,
   useRemoveSavedServiceMutation,
   useSaveServiceMutation,
 } from "@/src/store/services/apiSlice";
-
-const tomorrow = new Date();
-tomorrow.setDate(tomorrow.getDate() + 1);
 
 export default function ServiceDetailsPage() {
   const router = useRouter();
   const { id = "" } = useLocalSearchParams<{ id?: string }>();
   const { isAuthenticated, updateProfile, user } = useAuth();
   const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
-  const [createOrder, { isLoading: bookingLoading }] = useCreateOrderMutation();
   const [saveService, { isLoading: isSavingService }] = useSaveServiceMutation();
   const [removeSavedService, { isLoading: isRemovingSavedService }] = useRemoveSavedServiceMutation();
   const service = data?.data || null;
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(0);
   const [selectedPackage, setSelectedPackage] = useState(0);
-  const [serviceAddress, setServiceAddress] = useState(user?.address || "");
-  const [specialInstructions, setSpecialInstructions] = useState("");
-  const [scheduledDate, setScheduledDate] = useState(tomorrow.toISOString().slice(0, 10));
-  const [scheduledTime, setScheduledTime] = useState("10:00 AM");
+  const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
   const activePackage = useMemo(() => service?.packages?.[selectedPackage] || null, [selectedPackage, service]);
+  const images = useMemo(() => (Array.isArray(service?.images) && service.images.length ? service.images : []), [service?.images]);
   const isSaved = Boolean(user?.savedServiceIds?.includes(service?.id || ""));
   const isSaveActionLoading = isSavingService || isRemovingSavedService;
+  const serviceLocation =
+    typeof (service as any)?.locationLat === "number" && typeof (service as any)?.locationLng === "number"
+      ? { lat: (service as any).locationLat, lng: (service as any).locationLng }
+      : null;
 
   const handleToggleSave = async () => {
     if (!service) return;
@@ -45,7 +52,10 @@ export default function ServiceDetailsPage() {
     try {
       if (isSaved) {
         const payload = await removeSavedService(service.id).unwrap();
-        await updateProfile(payload.data.user || { savedServiceIds: (user?.savedServiceIds || []).filter((item) => item !== service.id) });
+        await updateProfile({
+          ...(payload.data.user || {}),
+          savedServiceIds: (payload.data.user?.savedServiceIds || user?.savedServiceIds || []).filter((item) => item !== service.id),
+        });
       } else {
         const payload = await saveService(service.id).unwrap();
         await updateProfile(payload.data.user || { savedServiceIds: [...(user?.savedServiceIds || []), service.id] });
@@ -62,47 +72,65 @@ export default function ServiceDetailsPage() {
       router.push("/(auth)/login");
       return;
     }
-    if (!serviceAddress.trim()) {
-      Alert.alert("Address required", "Please enter your service address.");
-      return;
-    }
-
-    try {
-      const payload = await createOrder({
-        gigId: service.id,
-        packageName: activePackage.name,
-        packageTitle: activePackage.title,
-        scheduledDate,
-        scheduledTime,
-        serviceAddress: serviceAddress.trim(),
-        specialInstructions: specialInstructions.trim(),
-      }).unwrap();
-      setIsModalVisible(false);
-      Alert.alert("Order created", payload.message || "Your order has been created successfully.", [
-        { text: "Open bookings", onPress: () => router.push("/(tabs)/booking") },
-      ]);
-    } catch (error) {
-      Alert.alert("Booking failed", error instanceof Error ? error.message : "Please try again.");
-    }
+    router.push({ pathname: "/book-service", params: { id: service.id, packageName: activePackage.name } });
   };
 
   if (isLoading) {
-    return <View className="flex-1 items-center justify-center bg-white"><ActivityIndicator size="large" color="#2B84B1" /></View>;
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator size="large" color="#2B84B1" />
+      </View>
+    );
   }
 
   if (!service) {
-    return <View className="flex-1 items-center justify-center bg-white px-8"><Text className="text-[18px] font-bold text-[#1A2C42] mb-2">Service not found</Text></View>;
+    return (
+      <View className="flex-1 items-center justify-center bg-white px-8">
+        <Text className="text-[18px] font-bold text-[#1A2C42] mb-2">Service not found</Text>
+      </View>
+    );
   }
 
   return (
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        <View className="relative w-full h-[320px] bg-slate-100">
-          {service.images[0] ? <Image source={{ uri: service.images[0] }} className="w-full h-full" /> : null}
-          <TouchableOpacity onPress={() => router.back()} className="absolute top-14 left-6 w-10 h-10 bg-white/20 rounded-full items-center justify-center border border-white/30">
+        <View className="relative w-full h-[340px] bg-slate-100">
+          {images[selectedImage] ? (
+            <Image source={{ uri: images[selectedImage] }} className="w-full h-full" resizeMode="cover" />
+          ) : null}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="absolute top-14 left-6 w-11 h-11 bg-white/20 rounded-full items-center justify-center border border-white/30"
+          >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => void handleToggleSave()}
+            disabled={isSaveActionLoading}
+            className="absolute top-14 right-6 w-11 h-11 bg-white/20 rounded-full items-center justify-center border border-white/30"
+          >
+            {isSaveActionLoading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Ionicons name={isSaved ? "heart" : "heart-outline"} size={22} color="white" />
+            )}
+          </TouchableOpacity>
         </View>
+
+        {images.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-6 mt-4">
+            {images.map((image, index) => (
+              <TouchableOpacity
+                key={`${image}-${index}`}
+                onPress={() => setSelectedImage(index)}
+                className={`mr-3 rounded-[18px] overflow-hidden border-2 ${selectedImage === index ? "border-[#2B84B1]" : "border-transparent"}`}
+              >
+                <Image source={{ uri: image }} className="w-[82px] h-[82px]" resizeMode="cover" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : null}
+
         <View className="px-6 -mt-12">
           <View className="bg-white rounded-[24px] p-6 shadow-xl shadow-black/10 border border-gray-50">
             <View className="flex-row items-center mb-3">
@@ -110,85 +138,146 @@ export default function ServiceDetailsPage() {
               <Text className="text-[20px] font-bold text-[#1A2C42] flex-1">{service.title}</Text>
             </View>
             <View className="flex-row items-center mb-4">
-              <Text className="text-[16px] font-bold text-[#4A5568]">{service.provider.name}</Text>
+              <TouchableOpacity onPress={() => router.push({ pathname: "/provider-profile", params: { id: service.provider.id } })}>
+                <Text className="text-[16px] font-bold text-[#2B84B1]">{service.provider.name}</Text>
+              </TouchableOpacity>
+              <Text className="text-[13px] text-[#7C8B95] ml-2">• {service.categoryName}</Text>
             </View>
-            <Text className="text-[32px] font-black text-[#2B84B1] leading-[32px]">{formatCurrency(service.avgPackagePrice)}</Text>
-            <TouchableOpacity
-              onPress={() => void handleToggleSave()}
-              disabled={isSaveActionLoading}
-              className={`mt-5 self-start px-4 py-2 rounded-full flex-row items-center ${isSaveActionLoading ? "bg-[#EAF3FA]" : "bg-[#F8FAFC]"}`}
-            >
-              {isSaveActionLoading ? (
-                <>
-                  <ActivityIndicator size="small" color="#2B84B1" />
-                  <Text className="text-[#2B84B1] font-bold text-[13px] ml-2">
-                    {isSaved ? "Removing..." : "Saving..."}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name={isSaved ? "heart" : "heart-outline"} size={16} color="#2B84B1" />
-                  <Text className="text-[#2B84B1] font-bold text-[13px] ml-2">{isSaved ? "Saved" : "Save Service"}</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <Text className="text-[34px] font-black text-[#2B84B1] leading-[34px]">{formatCurrency(service.avgPackagePrice)}</Text>
+            <Text className="text-[13px] font-bold uppercase tracking-[0.18em] text-[#7C8B95] mt-2">Starting price</Text>
+
+            <View className="flex-row mt-6">
+              <View className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+                <Text className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Rating</Text>
+                <Text className="text-[22px] font-black text-[#1A2C42] mt-2">
+                  {Number(service.provider.rating || 0).toFixed(1)}
+                </Text>
+              </View>
+              <View className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+                <Text className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Reviews</Text>
+                <Text className="text-[22px] font-black text-[#1A2C42] mt-2">{service.reviews.length}</Text>
+              </View>
+              <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+                <Text className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Packages</Text>
+                <Text className="text-[22px] font-black text-[#1A2C42] mt-2">{service.packages.length}</Text>
+              </View>
+            </View>
           </View>
         </View>
+
         <View className="px-6 mt-10">
-          <Text className="text-[22px] font-bold text-[#1A2C42] mb-4">About Me</Text>
-          <Text className="text-[15px] leading-[24px] text-[#7C8B95] font-medium">{service.description || service.provider.bio || "No description added yet."}</Text>
+          <Text className="text-[22px] font-bold text-[#1A2C42] mb-4">About This Service</Text>
+          <Text className="text-[15px] leading-[24px] text-[#7C8B95] font-medium">
+            {service.description || service.provider.bio || "No description added yet."}
+          </Text>
         </View>
+
+        <View className="px-6 mt-10">
+          <Text className="text-[22px] font-bold text-[#1A2C42] mb-4">Requirements</Text>
+          <View className="bg-[#F8FAFC] rounded-[24px] p-5">
+            <Text className="text-[15px] leading-[24px] text-[#5F7182] font-medium">
+              {service.requirements || "The provider will confirm any custom requirements with you after booking."}
+            </Text>
+          </View>
+        </View>
+
         <View className="px-6 mt-10">
           <Text className="text-[22px] font-bold text-[#1A2C42] mb-4">Packages</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {service.packages.map((pkg, index) => (
-              <TouchableOpacity key={`${pkg.name}-${index}`} onPress={() => setSelectedPackage(index)} className={`mr-4 rounded-[24px] p-5 border w-[240px] ${selectedPackage === index ? "bg-[#EAF3FA] border-[#2B84B1]" : "bg-white border-gray-100"}`}>
-                <Text className="text-[14px] font-bold text-[#2B84B1] mb-2">{pkg.name}</Text>
+              <TouchableOpacity
+                key={`${pkg.name}-${index}`}
+                onPress={() => setSelectedPackage(index)}
+                className={`mr-4 rounded-[24px] p-5 border w-[260px] ${selectedPackage === index ? "bg-[#EAF3FA] border-[#2B84B1]" : "bg-white border-gray-100"}`}
+              >
+                <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#2B84B1] mb-2">{pkg.name}</Text>
                 <Text className="text-[18px] font-bold text-[#1A2C42] mb-2">{pkg.title}</Text>
-                <Text className="text-[14px] text-[#7C8B95] mb-3" numberOfLines={3}>{pkg.description}</Text>
-                <Text className="text-[15px] font-black text-[#1A2C42]">{formatCurrency(pkg.price)}</Text>
+                <Text className="text-[14px] text-[#7C8B95] mb-4 leading-[22px]" numberOfLines={4}>
+                  {pkg.description || "Package details will be shared after booking."}
+                </Text>
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Delivery</Text>
+                    <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">{pkg.deliveryTime || "Flexible"}</Text>
+                  </View>
+                  <Text className="text-[18px] font-black text-[#1A2C42]">{formatCurrency(pkg.price)}</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
-        <View className="px-6 mt-12 pb-10">
-          <View className="flex-row items-center mb-6">
-            <Ionicons name="star" size={16} color="#2B84B1" />
-            <Text className="text-[16px] font-bold text-[#1A2C42] ml-2">{Number(service.provider.rating || 0).toFixed(1)} <Text className="text-[#7C8B95] font-normal">({service.reviews.length} reviews)</Text></Text>
-          </View>
-          {service.reviews.map((review) => (
-            <View key={review.id} className="mb-10">
-              <Text className="text-[16px] font-bold text-[#1A2C42]">{review.client.name}</Text>
-              <Text className="text-[13px] font-medium text-[#7C8B95]">{formatDateLabel(review.createdAt)}</Text>
-              <Text className="text-[14px] leading-[22px] text-[#7C8B95] font-medium mt-3">{review.review || "No written review."}</Text>
+
+        {serviceLocation ? (
+          <View className="px-6 mt-10">
+            <Text className="text-[22px] font-bold text-[#1A2C42] mb-2">Service Area</Text>
+            <Text className="text-[14px] leading-[22px] text-[#7C8B95] font-medium mb-4">
+              {service.baseCity || "Interactive location preview"}
+            </Text>
+            <MapboxLocationPicker
+              token={mapboxToken}
+              initialCenter={serviceLocation}
+              interactive={false}
+              height={240}
+              badgeText="Service location preview"
+              loadingText="Loading service area map..."
+              fallbackHintText="Using fallback map tiles. Add EXPO_PUBLIC_MAPBOX_TOKEN for the same Mapbox styling as web."
+              onCenterChange={() => {}}
+            />
+            <View className="mt-3 flex-row items-center rounded-[18px] bg-[#F8FAFC] px-4 py-3">
+              <Ionicons name="location-outline" size={18} color="#2286BE" />
+              <Text className="ml-2 flex-1 text-[13px] font-bold text-[#1A2C42]">
+                {service.baseCity || "Location available"}
+                {(service as any).travelRadiusKm ? ` • Within ${formatMilesFromKm((service as any).travelRadiusKm)}` : ""}
+              </Text>
             </View>
-          ))}
+          </View>
+        ) : null}
+
+        <View className="px-6 mt-12">
+          <View className="flex-row items-center justify-between mb-5">
+            <View className="flex-row items-center">
+              <Ionicons name="star" size={16} color="#2B84B1" />
+              <Text className="text-[16px] font-bold text-[#1A2C42] ml-2">
+                {Number(service.provider.rating || 0).toFixed(1)}{" "}
+                <Text className="text-[#7C8B95] font-normal">({service.reviews.length} reviews)</Text>
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push({ pathname: "/provider-profile", params: { id: service.provider.id } })}>
+              <Text className="text-[#2B84B1] font-bold">View Provider</Text>
+            </TouchableOpacity>
+          </View>
+          {service.reviews.length ? (
+            service.reviews.map((review) => (
+              <View key={review.id} className="mb-6 bg-white rounded-[22px] p-5 border border-gray-100 shadow-sm shadow-black/5">
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text className="text-[16px] font-bold text-[#1A2C42]">{review.client.name}</Text>
+                  <Text className="text-[13px] font-medium text-[#7C8B95]">{formatDateLabel(review.createdAt)}</Text>
+                </View>
+                <Text className="text-[14px] leading-[22px] text-[#7C8B95] font-medium">
+                  {review.review || "No written review."}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <View className="bg-[#F8FAFC] rounded-[22px] p-5">
+              <Text className="text-[14px] font-medium text-[#7C8B95]">No reviews yet for this service.</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
-      <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100 flex-row items-center justify-between">
-        <TouchableOpacity onPress={() => setIsModalVisible(true)} className="bg-[#2B84B1] flex-1 py-5 rounded-[18px] items-center">
+
+      <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100">
+        <View className="flex-row items-center justify-between mb-3">
+          <View>
+            <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Selected Package</Text>
+            <Text className="text-[16px] font-bold text-[#1A2C42] mt-1">{activePackage?.title || "Choose a package"}</Text>
+          </View>
+          <Text className="text-[22px] font-black text-[#2B84B1]">{formatCurrency(activePackage?.price || service.avgPackagePrice)}</Text>
+        </View>
+        <TouchableOpacity onPress={() => void handleBookNow()} className="bg-[#2B84B1] py-5 rounded-[18px] items-center">
           <Text className="text-white font-bold text-[17px]">Book Now</Text>
         </TouchableOpacity>
       </View>
-      <Modal animationType="slide" transparent visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="bg-white rounded-t-[40px] px-8 pt-8 pb-12">
-            <View className="flex-row justify-between items-center mb-8">
-              <Text className="text-[22px] font-bold text-[#1A2C42] flex-1">Complete your booking</Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)} className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center">
-                <Ionicons name="close" size={24} color="#4A5568" />
-              </TouchableOpacity>
-            </View>
-            <TextInput value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" className="bg-[#F8FAFC] rounded-[18px] px-5 py-4 text-[16px] mb-4" />
-            <TextInput value={scheduledTime} onChangeText={setScheduledTime} placeholder="10:00 AM" className="bg-[#F8FAFC] rounded-[18px] px-5 py-4 text-[16px] mb-4" />
-            <TextInput value={serviceAddress} onChangeText={setServiceAddress} placeholder="Enter service address" className="bg-[#F8FAFC] rounded-[18px] px-5 py-4 text-[16px] mb-4" />
-            <TextInput value={specialInstructions} onChangeText={setSpecialInstructions} placeholder="Anything the provider should know?" multiline className="bg-[#F8FAFC] rounded-[18px] px-5 py-4 text-[16px] h-[100px] mb-6" textAlignVertical="top" />
-            <TouchableOpacity onPress={() => void handleBookNow()} disabled={bookingLoading} className="bg-[#2B84B1] w-full py-5 rounded-[24px] items-center">
-              {bookingLoading ? <ActivityIndicator color="white" /> : <Text className="text-white font-black text-[20px]">Continue</Text>}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

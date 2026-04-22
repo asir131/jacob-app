@@ -5,6 +5,39 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 
+const normalizeTargetPath = (targetPath: string) => {
+  const trimmed = targetPath.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("/client/orders/")) {
+    return {
+      pathname: "/booking-details",
+      params: { id: trimmed.replace("/client/orders/", ""), role: "client" },
+    } as const;
+  }
+
+  if (trimmed === "/client/orders" || trimmed.startsWith("/client/orders?")) {
+    return "/(tabs)/booking" as const;
+  }
+
+  if (trimmed.startsWith("/provider/orders/")) {
+    return {
+      pathname: "/booking-details",
+      params: { id: trimmed.replace("/provider/orders/", ""), role: "provider" },
+    } as const;
+  }
+
+  if (trimmed === "/provider/orders") return "/(provider-tabs)/orders" as const;
+  if (trimmed === "/provider/requests") return "/(provider)/requests" as const;
+  if (trimmed === "/provider/dashboard") return "/(provider-tabs)" as const;
+  if (trimmed === "/provider/withdrawals") return "/(provider)/earnings" as const;
+  if (trimmed === "/provider/profile" || trimmed === "/client/profile") return "/(profile)/personal-info" as const;
+  if (trimmed === "/client/saved-services") return "/client-saved-services" as const;
+  if (trimmed === "/notifications") return "/notifications" as const;
+
+  return null;
+};
+
 export default function NotificationPage() {
   const router = useRouter();
   const { clearNotifications, markAllNotificationsAsRead, notifications, unreadCount } =
@@ -39,7 +72,18 @@ export default function NotificationPage() {
       <ScrollView className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
         {notifications.length ? (
           notifications.map((item) => (
-            <View key={item.id} className="flex-row items-start py-5 border-b border-gray-100">
+            <TouchableOpacity
+              key={item.id}
+              activeOpacity={item.data?.targetPath ? 0.85 : 1}
+              disabled={!item.data?.targetPath}
+              onPress={() => {
+                const targetPath = typeof item.data?.targetPath === "string" ? item.data.targetPath : "";
+                const target = normalizeTargetPath(targetPath);
+                if (!target) return;
+                router.push(target as never);
+              }}
+              className="flex-row items-start py-5 border-b border-gray-100"
+            >
               <View className="w-4 h-4 mr-2 items-center justify-center mt-1">
                 {item.unread ? <View className="w-2 h-2 rounded-full bg-[#2B84B1]" /> : null}
               </View>
@@ -53,11 +97,14 @@ export default function NotificationPage() {
               <View className="flex-1">
                 <Text className="text-[15px] font-bold text-[#1A2C42]">{item.title}</Text>
                 <Text className="text-[14px] text-[#7C8B95] mt-1 leading-[22px]">{item.description}</Text>
+                {item.data?.targetPath ? (
+                  <Text className="text-[12px] font-bold text-[#2B84B1] mt-2 uppercase tracking-[0.14em]">Open</Text>
+                ) : null}
                 <Text className="text-[12px] text-[#94A3B8] mt-2">
                   {new Date(item.createdAt).toLocaleString()}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         ) : (
           <View className="items-center justify-center px-8 py-16">

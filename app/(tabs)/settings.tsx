@@ -9,7 +9,7 @@ import { useRouter } from "expo-router";
 
 export default function SettingsPage() {
     const router = useRouter();
-    const { user, logout } = useAuth();
+    const { setRole, user, logout } = useAuth();
     const { unreadCount, socketConnected } = useSocketNotifications();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
@@ -96,23 +96,47 @@ export default function SettingsPage() {
                     </TouchableOpacity>
                 </View>
 
+                {/* Quick Navigation */}
+                <View className="px-6 mb-8">
+                    <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-2">
+                        Quick Navigation
+                    </Text>
+                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
+                        <SettingsRow
+                            icon="swap-horizontal-outline"
+                            label="Switch to Selling"
+                            color="#2B84B1"
+                            onPress={async () => {
+                                await setRole("provider");
+                                router.replace("/(provider-tabs)");
+                            }}
+                        />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="grid-outline" label="Dashboard" color="#2B84B1" route="/(tabs)" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="briefcase-outline" label="My Orders" color="#2B84B1" route="/(tabs)/booking" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="heart-outline" label="Saved Services" color="#2B84B1" route="/client-saved-services" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="settings-outline" label="Settings" value="Current" color="#2B84B1" />
+                    </View>
+                </View>
+
                 {/* Account Settings */}
                 <View className="px-6 mb-8">
                     <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-2">
                         Account Settings
                     </Text>
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow icon="person-outline" label="Personal Information" color="#2B84B1" route="/(profile)/personal-info" />
+                        <SettingsRow icon="person-outline" label="Profile Info" color="#2B84B1" route="/(profile)/personal-info" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="card-outline" label="Payment Methods" value="Visa ending 4242" color="#2B84B1" route="/(profile)/payment-methods" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="location-outline" label="Saved Addresses" value={user?.address ? "1 place" : "Not set"} color="#2B84B1" route="/(profile)/saved-addresses" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="heart-outline" label="Saved Services" color="#2B84B1" route="/client-saved-services" />
+                        <SettingsRow icon="shield-checkmark-outline" label="Security" color="#2B84B1" route="/(profile)/security" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="document-text-outline" label="My Requests" color="#2B84B1" route="/client-requests" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="shield-checkmark-outline" label="Security & Password" color="#2B84B1" route="/(profile)/security" />
+                        <SettingsRow icon="location-outline" label="Saved Addresses" value={user?.address ? "1 place" : "Not set"} color="#2B84B1" route="/(profile)/saved-addresses" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="card-outline" label="Payment Methods" value="Visa ending 4242" color="#2B84B1" route="/(profile)/payment-methods" />
                     </View>
                 </View>
 
@@ -152,9 +176,17 @@ export default function SettingsPage() {
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
                         <SettingsRow icon="help-buoy-outline" label="Help Center" color="#10B981" route="/(provider)/support" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="document-text-outline" label="Terms of Service" color="#10B981" />
+                        <SettingsRow icon="mail-outline" label="Contact Us" color="#10B981" route="/contact" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="lock-closed-outline" label="Privacy Policy" color="#10B981" />
+                        <SettingsRow icon="information-circle-outline" label="About Jacob" color="#10B981" route="/about" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="briefcase-outline" label="Join as Provider" color="#10B981" route="/join-provider" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="rocket-outline" label="Success Stories" color="#10B981" route="/success-stories" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="document-text-outline" label="Terms of Service" color="#10B981" route="/terms" />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <SettingsRow icon="lock-closed-outline" label="Privacy Policy" color="#10B981" route="/privacy" />
                     </View>
                 </View>
 
