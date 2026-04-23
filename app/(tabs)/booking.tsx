@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -225,6 +226,22 @@ export default function BookingPage() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: tabBarHeight + 24 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={currentFetching && !currentLoading}
+            onRefresh={() => {
+              if (isRequestedTab) {
+                setRequestedPage(1);
+                void refetchRequests();
+              } else {
+                setPage(1);
+                void refetchOrders();
+              }
+            }}
+            tintColor="#2286BE"
+            colors={["#2286BE"]}
+          />
+        }
       >
         <View className="px-6 pt-6">
           <View className="bg-[#1A2C42] rounded-[30px] p-6 mb-6">
@@ -414,6 +431,13 @@ export default function BookingPage() {
                       <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#A0AEC0]">
                         {item.orderNumber}
                       </Text>
+                      {item.isRequestedOrder ? (
+                        <View className="self-start mt-2 px-3 py-1 rounded-full bg-[#FEF3C7]">
+                          <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B45309]">
+                            Requested Order
+                          </Text>
+                        </View>
+                      ) : null}
                       <Text className="text-[20px] font-black text-[#1A2C42] mt-2">{item.orderName}</Text>
                       <Text className="text-[13px] font-medium text-[#7C8B95] mt-2">
                         Category: {item.categoryName || "General"}

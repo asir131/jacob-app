@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
 import { formatMilesFromKm } from "@/src/lib/distance";
 import {
@@ -24,19 +26,56 @@ import type { ServiceRequestSummary } from "@/src/types/api";
 
 export default function ProviderRequestsPage() {
   const router = useRouter();
+  const { socket } = useSocketNotifications();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
-  const { data, isLoading, isFetching, refetch } = useGetProviderServiceRequestsQuery({
-    page,
-    limit: 8,
-    radiusKm: 30,
-    search,
-  });
+  const { data, isLoading, isFetching, refetch } = useGetProviderServiceRequestsQuery(
+    {
+      page,
+      limit: 8,
+      radiusKm: 30,
+      search,
+    },
+    {
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      pollingInterval: 15000,
+    }
+  );
   const [acceptServiceRequest, { isLoading: accepting }] = useAcceptServiceRequestMutation();
   const [ignoreServiceRequest, { isLoading: ignoring }] = useIgnoreServiceRequestMutation();
   const items = (data?.data.items || []) as ServiceRequestSummary[];
   const pagination = data?.data.pagination;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRealtimeRefresh = (payload?: { data?: { notificationType?: string } }) => {
+      const notificationType = String(payload?.data?.notificationType || "");
+      const relevantType =
+        notificationType === "service_request_created" ||
+        notificationType === "service_request_accepted" ||
+        notificationType === "service_request_cancelled" ||
+        notificationType === "order_created";
+
+      if (relevantType || !notificationType) {
+        void refetch();
+      }
+    };
+
+    socket.on("notification:new", handleRealtimeRefresh);
+
+    return () => {
+      socket.off("notification:new", handleRealtimeRefresh);
+    };
+  }, [refetch, socket]);
 
   const acceptItem = async (id: string) => {
     try {
@@ -75,7 +114,22 @@ export default function ProviderRequestsPage() {
         <Text className="text-[20px] font-bold text-[#1A2C42]">Requested Orders</Text>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 30 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching && !isLoading}
+            onRefresh={() => {
+              setPage(1);
+              void refetch();
+            }}
+            tintColor="#2286BE"
+            colors={["#2286BE"]}
+          />
+        }
+      >
         <View className="px-6 pt-6">
           <View className="bg-[#1A2C42] rounded-[30px] p-6 mb-6">
             <Text className="text-white/65 text-[12px] font-bold tracking-[0.18em] uppercase">Nearby Work</Text>

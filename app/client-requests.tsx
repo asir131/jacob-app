@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCallback, useEffect, useState } from "react";
 
@@ -32,11 +32,12 @@ export default function ClientRequestsPage() {
   const router = useRouter();
   const { socket } = useSocketNotifications();
   const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>("all");
-  const { data, isLoading, refetch } = useGetClientServiceRequestsQuery(
+  const { data, isLoading, isFetching, refetch } = useGetClientServiceRequestsQuery(
     { page: 1, limit: 20, status },
     {
       refetchOnFocus: true,
       refetchOnReconnect: true,
+      pollingInterval: 15000,
     }
   );
   const items = data?.data.items || [];
@@ -94,7 +95,21 @@ export default function ClientRequestsPage() {
       {isLoading ? (
         <View className="flex-1 items-center justify-center"><ActivityIndicator color="#2286BE" size="large" /></View>
       ) : (
-        <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+        <ScrollView
+          className="flex-1 px-6 pt-4"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 30 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching && !isLoading}
+              onRefresh={() => {
+                void refetch();
+              }}
+              tintColor="#2286BE"
+              colors={["#2286BE"]}
+            />
+          }
+        >
           {items.length ? items.map((item) => (
             <View key={item.id} className="bg-white rounded-[24px] p-5 mb-5 border border-gray-100 shadow-sm shadow-gray-100">
               <View className="flex-row justify-between items-start">

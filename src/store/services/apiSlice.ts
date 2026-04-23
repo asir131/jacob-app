@@ -268,6 +268,17 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ["Orders"],
     }),
+    respondProviderRevision: builder.mutation<
+      ApiEnvelope<{ order: any }>,
+      { id: string; action: "accept" | "decline"; note?: string }
+    >({
+      query: ({ id, action, note = "" }) => ({
+        url: `/api/orders/provider/${id}/revision-response`,
+        method: "PATCH",
+        body: { action, note },
+      }),
+      invalidatesTags: ["Orders"],
+    }),
     requestClientRevision: builder.mutation<
       ApiEnvelope<{ order: any }>,
       { id: string; note: string }
@@ -304,6 +315,9 @@ export const apiSlice = createApi({
       query: ({ id }) => ({
         url: `/api/orders/client/${id}/stripe-checkout`,
         method: "POST",
+        headers: {
+          "x-client-platform": "mobile",
+        },
       }),
       invalidatesTags: ["Orders"],
     }),
@@ -601,6 +615,7 @@ export const {
   useAcceptProviderOrderMutation,
   useDeclineProviderOrderMutation,
   useSubmitProviderDeliveryMutation,
+  useRespondProviderRevisionMutation,
   useRequestClientRevisionMutation,
   useCancelClientRevisionMutation,
   useSendClientResolutionMessageMutation,

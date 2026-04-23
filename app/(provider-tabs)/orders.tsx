@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -12,11 +13,13 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency, formatDateLabel, formatStatusLabel } from "@/src/lib/formatters";
 import {
   useAcceptProviderOrderMutation,
   useDeclineProviderOrderMutation,
   useGetProviderOrdersQuery,
+  useRespondProviderRevisionMutation,
 } from "@/src/store/services/apiSlice";
 import type { OrderSummary } from "@/src/types/api";
 
@@ -31,22 +34,72 @@ const filters = [
 
 export default function ProviderOrders() {
   const router = useRouter();
+  const { socket } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight =
     Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const { data, isLoading, isFetching, refetch } = useGetProviderOrdersQuery({
-    page,
-    limit: 8,
-    status: filter,
-    search,
-  });
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetProviderOrdersQuery(
+    {
+      page,
+      limit: 8,
+      status: filter,
+      search,
+    },
+    {
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      pollingInterval: 15000,
+    }
+  );
   const [acceptProviderOrder, { isLoading: accepting }] = useAcceptProviderOrderMutation();
   const [declineProviderOrder, { isLoading: declining }] = useDeclineProviderOrderMutation();
+  const [respondProviderRevision, { isLoading: respondingRevision }] = useRespondProviderRevisionMutation();
   const orders = useMemo(() => ((data?.data.items || []) as OrderSummary[]), [data?.data.items]);
   const pagination = data?.data.pagination;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRealtimeRefresh = (payload?: { data?: { notificationType?: string; orderId?: string } }) => {
+      const notificationType = String(payload?.data?.notificationType || "");
+      const relevantType =
+        notificationType === "order_created" ||
+        notificationType === "order_accepted" ||
+        notificationType === "order_declined" ||
+        notificationType === "order_delivery_submitted" ||
+        notificationType === "order_revision_requested" ||
+        notificationType === "order_revision_accepted" ||
+        notificationType === "order_revision_declined" ||
+        notificationType === "order_revision_cancelled" ||
+        notificationType === "order_paid";
+
+      if (relevantType || !notificationType) {
+        void refetch();
+      }
+    };
+
+    socket.on("notification:new", handleRealtimeRefresh);
+    socket.on("chat:conversation:updated", handleRealtimeRefresh);
+
+    return () => {
+      socket.off("notification:new", handleRealtimeRefresh);
+      socket.off("chat:conversation:updated", handleRealtimeRefresh);
+    };
+  }, [refetch, socket]);
 
   const summary = useMemo(
     () => ({
@@ -68,6 +121,11 @@ export default function ProviderOrders() {
     refetch();
   };
 
+  const handleRevisionResponse = async (id: string, action: "accept" | "decline") => {
+    await respondProviderRevision({ id, action }).unwrap();
+    refetch();
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
       <View className="px-6 py-4 bg-white shadow-sm shadow-black/5 z-10 w-full">
@@ -75,7 +133,22 @@ export default function ProviderOrders() {
         <Text className="text-[14px] text-[#7C8B95] mt-1">Track incoming, active, and completed provider work.</Text>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 24 }}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 24 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching && !isLoading}
+            onRefresh={() => {
+              setPage(1);
+              void refetch();
+            }}
+            tintColor="#2286BE"
+            colors={["#2286BE"]}
+          />
+        }
+      >
         <View className="px-6 pt-6">
           <View className="bg-[#1A2C42] rounded-[30px] p-6 mb-6">
             <Text className="text-white/65 text-[12px] font-bold tracking-[0.18em] uppercase">Order Snapshot</Text>
@@ -139,7 +212,11 @@ export default function ProviderOrders() {
         ) : (
           <View className="px-6">
             {orders.length ? (
-              orders.map((order) => (
+              orders.map((order) => {
+                const isRevisionRequested =
+                  order.status === "revision_requested" || order.status === "after_sell_revision_requested";
+
+                return (
                 <TouchableOpacity
                   key={order.id}
                   activeOpacity={0.92}
@@ -151,6 +228,13 @@ export default function ProviderOrders() {
                       <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#A0AEC0]">
                         {order.orderNumber}
                       </Text>
+                      {order.isRequestedOrder ? (
+                        <View className="self-start mt-2 px-3 py-1 rounded-full bg-[#FEF3C7]">
+                          <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B45309]">
+                            Requested Order
+                          </Text>
+                        </View>
+                      ) : null}
                       <Text className="text-[20px] font-black text-[#1A2C42] mt-2" numberOfLines={2}>
                         {order.orderName}
                       </Text>
@@ -208,6 +292,31 @@ export default function ProviderOrders() {
                           )}
                         </TouchableOpacity>
                       </>
+                    ) : isRevisionRequested ? (
+                      <>
+                        <TouchableOpacity
+                          onPress={() => void handleRevisionResponse(order.id, "decline")}
+                          disabled={respondingRevision}
+                          className="flex-1 mr-3 bg-[#FFF5F5] border border-[#FECACA] rounded-[18px] py-4 items-center"
+                        >
+                          {respondingRevision ? (
+                            <ActivityIndicator color="#B91C1C" />
+                          ) : (
+                            <Text className="font-bold text-[#B91C1C]">Decline Revision</Text>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => void handleRevisionResponse(order.id, "accept")}
+                          disabled={respondingRevision}
+                          className="flex-1 bg-[#2286BE] rounded-[18px] py-4 items-center"
+                        >
+                          {respondingRevision ? (
+                            <ActivityIndicator color="white" />
+                          ) : (
+                            <Text className="font-bold text-white">Accept Revision</Text>
+                          )}
+                        </TouchableOpacity>
+                      </>
                     ) : (
                       <>
                         <TouchableOpacity
@@ -241,7 +350,7 @@ export default function ProviderOrders() {
                     )}
                   </View>
                 </TouchableOpacity>
-              ))
+              )})
             ) : (
               <View className="items-center justify-center py-24">
                 <View className="w-24 h-24 rounded-full bg-[#EAF3FA] items-center justify-center mb-5">

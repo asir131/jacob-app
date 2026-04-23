@@ -204,12 +204,12 @@ export default function SellerDashboard() {
         </View>
 
         <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5 mb-8">
-          <View className="flex-row items-center justify-between mb-5">
+          <View className="mb-5">
             <View>
               <Text className="text-[12px] font-bold tracking-[0.18em] uppercase text-[#7C8B95]">Earnings Trend</Text>
               <Text className="text-[22px] font-black text-[#1A2C42] mt-2">Recent Performance</Text>
             </View>
-            <TouchableOpacity onPress={() => router.push("/(provider)/earnings" as never)}>
+            <TouchableOpacity onPress={() => router.push("/(provider)/earnings" as never)} className="mt-3 self-start">
               <Text className="text-[14px] font-bold text-[#2286BE]">View Earnings</Text>
             </TouchableOpacity>
           </View>
@@ -226,12 +226,12 @@ export default function SellerDashboard() {
         </View>
 
         <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5">
-          <View className="flex-row items-center justify-between mb-5">
+          <View className="mb-5">
             <View>
               <Text className="text-[12px] font-bold tracking-[0.18em] uppercase text-[#7C8B95]">Request Inbox</Text>
               <Text className="text-[22px] font-black text-[#1A2C42] mt-2">Pending Opportunities</Text>
             </View>
-            <TouchableOpacity onPress={() => router.push("/(provider)/requests" as never)}>
+            <TouchableOpacity onPress={() => router.push("/(provider)/requests" as never)} className="mt-3 self-start">
               <Text className="text-[14px] font-bold text-[#2286BE]">Open Requests</Text>
             </TouchableOpacity>
           </View>

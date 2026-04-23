@@ -36,6 +36,11 @@ const notificationSlice = createSlice({
     removeNotification: (state, action: PayloadAction<string>) => {
       state.items = state.items.filter((item) => item.id !== action.payload);
     },
+    markNotificationAsRead: (state, action: PayloadAction<string>) => {
+      state.items = state.items.map((item) =>
+        item.id === action.payload ? { ...item, unread: false } : item
+      );
+    },
     markAllNotificationsAsRead: (state) => {
       state.items = state.items.map((item) => ({ ...item, unread: false }));
     },
@@ -52,6 +57,7 @@ export const {
   hydrateNotifications,
   addNotification,
   removeNotification,
+  markNotificationAsRead,
   markAllNotificationsAsRead,
   clearNotifications,
   setSocketConnectedState,

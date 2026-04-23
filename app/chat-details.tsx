@@ -27,7 +27,7 @@ import {
   mediaDevices,
   registerGlobals,
 } from "react-native-webrtc";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
@@ -94,6 +94,7 @@ export default function ChatDetailsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { socket } = useSocketNotifications();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     conversationId?: string;
     orderId?: string;
@@ -798,6 +799,7 @@ export default function ChatDetailsPage() {
             ) : null}
 
             <View className="h-4" />
+            <View style={{ height: insets.bottom + 12 }} />
           </ScrollView>
         )}
 
@@ -838,8 +840,9 @@ export default function ChatDetailsPage() {
             elevation: 10,
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
+            paddingBottom: Math.max(insets.bottom + 12, 24),
           }}
-          className="bg-white px-6 pt-4 pb-6 border-t border-[#F2F2F2] flex-row items-center"
+          className="bg-white px-6 pt-4 border-t border-[#F2F2F2] flex-row items-center"
         >
           <TouchableOpacity
             onPress={() => void handlePickAttachments()}

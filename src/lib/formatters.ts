@@ -14,9 +14,25 @@ export const formatDateLabel = (value?: string | null) => {
 export const formatTimeLabel = (value?: string | null) => value || "Time not set";
 
 export const formatStatusLabel = (value?: string | null) => {
-  const normalized = String(value || "")
-    .replace(/_/g, " ")
-    .trim();
+  const raw = String(value || "").trim().toLowerCase();
+  const statusMap: Record<string, string> = {
+    pending: "Pending",
+    accepted: "Accepted",
+    accepting_delivery: "Accepting Delivery",
+    revision_requested: "Request Revision",
+    under_revision: "Under Revision",
+    after_sell_revision_requested: "After-Sale Revision",
+    under_after_sell_revision: "Under After-Sale Revision",
+    done_after_sell_revision: "Done After-Sale Revision",
+    completed: "Completed",
+    declined: "Declined",
+    cancelled: "Cancelled",
+    open: "Open",
+  };
+
+  if (statusMap[raw]) return statusMap[raw];
+
+  const normalized = raw.replace(/_/g, " ").trim();
 
   if (!normalized) return "Unknown";
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());

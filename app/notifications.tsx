@@ -4,42 +4,57 @@ import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import { useAppDispatch } from "@/src/store/hooks";
+import { markNotificationAsRead } from "@/src/store/slices/notificationSlice";
 
 const normalizeTargetPath = (targetPath: string) => {
   const trimmed = targetPath.trim();
   if (!trimmed) return null;
+  const [pathname, queryString = ""] = trimmed.split("?");
+  const searchParams = new URLSearchParams(queryString);
 
-  if (trimmed.startsWith("/client/orders/")) {
+  if (pathname.startsWith("/client/orders/")) {
     return {
       pathname: "/booking-details",
-      params: { id: trimmed.replace("/client/orders/", ""), role: "client" },
+      params: { id: pathname.replace("/client/orders/", ""), role: "client" },
     } as const;
   }
 
-  if (trimmed === "/client/orders" || trimmed.startsWith("/client/orders?")) {
+  if (pathname === "/client/orders") {
     return "/(tabs)/booking" as const;
   }
 
-  if (trimmed.startsWith("/provider/orders/")) {
+  if (pathname.startsWith("/provider/orders/")) {
     return {
       pathname: "/booking-details",
-      params: { id: trimmed.replace("/provider/orders/", ""), role: "provider" },
+      params: { id: pathname.replace("/provider/orders/", ""), role: "provider" },
     } as const;
   }
 
-  if (trimmed === "/provider/orders") return "/(provider-tabs)/orders" as const;
-  if (trimmed === "/provider/requests") return "/(provider)/requests" as const;
-  if (trimmed === "/provider/dashboard") return "/(provider-tabs)" as const;
-  if (trimmed === "/provider/withdrawals") return "/(provider)/earnings" as const;
-  if (trimmed === "/provider/profile" || trimmed === "/client/profile") return "/(profile)/personal-info" as const;
-  if (trimmed === "/client/saved-services") return "/client-saved-services" as const;
-  if (trimmed === "/notifications") return "/notifications" as const;
+  if (pathname === "/provider/orders") return "/(provider-tabs)/orders" as const;
+  if (pathname === "/provider/requests") return "/(provider)/requests" as const;
+  if (pathname === "/provider/dashboard") return "/(provider-tabs)" as const;
+  if (pathname === "/provider/withdrawals" || pathname === "/withdrawals") return "/(provider)/earnings" as const;
+  if (pathname === "/provider/profile" || pathname === "/client/profile") return "/(profile)/personal-info" as const;
+  if (pathname === "/client/saved-services") return "/client-saved-services" as const;
+  if (pathname === "/notifications") return "/notifications" as const;
+  if (pathname === "/support") return "/(provider)/support" as const;
+  if (pathname === "/messages") {
+    return {
+      pathname: "/chat-details",
+      params: {
+        conversationId: searchParams.get("conversationId") || "",
+        orderId: searchParams.get("orderId") || "",
+      },
+    } as const;
+  }
 
   return null;
 };
 
 export default function NotificationPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { clearNotifications, markAllNotificationsAsRead, notifications, unreadCount } =
     useSocketNotifications();
 
@@ -80,6 +95,7 @@ export default function NotificationPage() {
                 const targetPath = typeof item.data?.targetPath === "string" ? item.data.targetPath : "";
                 const target = normalizeTargetPath(targetPath);
                 if (!target) return;
+                dispatch(markNotificationAsRead(item.id));
                 router.push(target as never);
               }}
               className="flex-row items-start py-5 border-b border-gray-100"

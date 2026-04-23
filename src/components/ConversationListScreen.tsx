@@ -6,6 +6,7 @@ import {
   FlatList,
   Image,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -66,9 +67,20 @@ export function ConversationListScreen() {
 
     const query = search.trim().toLowerCase();
     if (!query) return items;
+
+    const normalizeValue = (value: unknown) => String(value || "").toLowerCase();
+
     return items.filter((item) => {
-      const haystacks = [item.otherUser.name, item.orderName || "", item.lastMessage || ""];
-      return haystacks.some((value) => value.toLowerCase().includes(query));
+      const haystacks = [
+        normalizeValue(item.otherUser?.name),
+        normalizeValue(item.otherUser?.email),
+        normalizeValue(item.orderName),
+        normalizeValue(item.orderNumber),
+        normalizeValue(item.categoryName),
+        normalizeValue(item.packageTitle),
+        normalizeValue(item.lastMessage),
+      ];
+      return haystacks.some((value) => value.includes(query));
     });
   }, [activeTab, data?.data, search]);
   const errorMessage = getQueryErrorMessage(error, "We could not load your conversations.");
@@ -145,6 +157,16 @@ export function ConversationListScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching}
+              onRefresh={() => {
+                void refetch();
+              }}
+              tintColor="#2286BE"
+              colors={["#2286BE"]}
+            />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               onPress={() =>
