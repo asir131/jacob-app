@@ -55,6 +55,7 @@ export default function ClientRequestsPage() {
       const notificationType = String(payload?.data?.notificationType || "");
       const relevantType =
         notificationType === "service_request_accepted" ||
+        notificationType === "custom_category_request_approved" ||
         notificationType === "service_request_cancelled" ||
         notificationType === "order_created_from_request" ||
         notificationType === "order_accepted" ||
@@ -116,9 +117,23 @@ export default function ClientRequestsPage() {
                 <View className="flex-1 mr-4">
                   <Text className="text-[12px] font-bold uppercase tracking-widest text-[#A0AEC0]">{item.requestNumber}</Text>
                   <Text className="text-[18px] font-bold text-[#1A2C42] mt-2">{item.categoryName}</Text>
+                  {item.requestSource === "custom_category" ? (
+                    <Text className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#5B6EFF]">
+                      {item.customCategoryApprovalStatus === "approved"
+                        ? "Custom category approved"
+                        : "Waiting for admin category approval"}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
               <Text className="text-[14px] text-[#7C8B95] mt-3 leading-[22px]">{item.description}</Text>
+              {item.requestSource === "custom_category" && item.pendingAdminCategoryApproval ? (
+                <View className="mt-4 rounded-[18px] border border-dashed border-[#C7D2FE] bg-[#EEF2FF] px-4 py-3">
+                  <Text className="text-[12px] font-semibold leading-[18px] text-[#4338CA]">
+                    Your new category request for {item.customCategoryName || item.categoryName} is waiting for admin approval.
+                  </Text>
+                </View>
+              ) : null}
               <View className="flex-row items-center mt-4">
                 <Ionicons name="location-outline" size={16} color="#94A3B8" />
                 <Text className="text-[13px] text-[#7C8B95] ml-2 flex-1">{item.serviceAddress}</Text>

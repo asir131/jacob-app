@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency } from "@/src/lib/formatters";
+import { extractZipCode, isValidZipCode } from "@/src/lib/zip";
 import {
   useGetClientDashboardQuery,
   useGetCategoriesQuery,
@@ -60,10 +61,22 @@ const formatRecentTime = (scheduledDate?: string, scheduledTime?: string) => {
   return scheduledTime ? `${formattedDate}, ${scheduledTime}` : formattedDate;
 };
 
+const slugifySearchTerm = (value: string) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuth();
   const { notifications, unreadCount } = useSocketNotifications();
+  const [searchText, setSearchText] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [selectedCategorySlug, setSelectedCategorySlug] = useState("");
+  const [searchSubmitted, setSearchSubmitted] = useState(false);
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const insets = useSafeAreaInsets();
   const tabBarHeight =
     Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
@@ -80,6 +93,22 @@ export default function HomePage() {
     lat: typeof user?.locationLat === "number" ? user.locationLat : null,
     lng: typeof user?.locationLng === "number" ? user.locationLng : null,
   });
+  const {
+    data: searchPayload,
+    isFetching: searchingServices,
+  } = useGetPublicServicesQuery(
+    {
+      page: 1,
+      limit: 100,
+      radiusKm: 100,
+      categorySlug: selectedCategorySlug || "all",
+      search: searchText.trim(),
+      zipCode: extractZipCode(zipCode),
+    },
+    {
+      skip: !searchSubmitted,
+    }
+  );
   const { data: faqPayload } = useGetFaqsQuery();
   const dashboard = dashboardPayload?.data;
   const activeOrders = Number(dashboard?.orders?.activeOrders || 0);
@@ -90,8 +119,17 @@ export default function HomePage() {
   const completionRate = Number(dashboard?.orders?.completionRate || 0);
   const inboxCount = Number(dashboard?.inbox?.unreadMessages || 0);
   const savedServicesCount = Array.isArray(user?.savedServiceIds) ? user.savedServiceIds.length : 0;
-  const categories = (categoryPayload?.data || []).slice(0, 3);
+  const categories = useMemo(() => categoryPayload?.data || [], [categoryPayload?.data]);
+  const featuredCategories = categories.slice(0, 3);
+  const categorySuggestions = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return categories;
+    return categories.filter((item) => item.name.toLowerCase().includes(query));
+  }, [categories, searchText]);
   const services = servicePayload?.data.items || [];
+  const searchedServices = searchPayload?.data.items || [];
+  const showSearchResults = searchSubmitted;
+  const showNoResultsSuggestion = showSearchResults && !searchingServices && searchedServices.length === 0;
   const faqs = (faqPayload?.data || []).slice(0, 3);
   const recentOrders = Array.isArray(dashboard?.recentOrders) ? dashboard.recentOrders.slice(0, 2) : [];
   const activeNote =
@@ -112,6 +150,31 @@ export default function HomePage() {
     void refetchDashboard();
     void refetchServices();
   }, [latestNotification?.id, refetchDashboard, refetchServices]);
+
+  const openCustomRequestFlow = () => {
+    const categoryName = searchText.trim();
+    const categorySlug = selectedCategorySlug || slugifySearchTerm(categoryName);
+
+    if (!categoryName || !categorySlug) return;
+
+    router.push({
+      pathname: "/post-request",
+      params: {
+        categoryName,
+        categorySlug,
+        zipCode: extractZipCode(zipCode),
+      },
+    });
+  };
+
+  const handleSearch = () => {
+    const normalizedZip = extractZipCode(zipCode);
+    if (!isValidZipCode(normalizedZip)) {
+      return;
+    }
+    setShowCategorySuggestions(false);
+    setSearchSubmitted(true);
+  };
 
   return (
     <View className="flex-1 bg-white">
@@ -154,6 +217,12 @@ export default function HomePage() {
         className="flex-1 bg-[#FAFCFD]"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
+        keyboardShouldPersistTaps="handled"
+        onTouchStart={() => {
+          if (showCategorySuggestions) {
+            setShowCategorySuggestions(false);
+          }
+        }}
       >
         <View style={{ height: 40 }} />
         <View className="px-6 pt-2 pb-6">
@@ -161,25 +230,133 @@ export default function HomePage() {
             HELLO {`${user?.firstName || "Client"} ${user?.lastName || ""}`.trim()}
           </Text>
           <Text className="text-[34px] font-black text-[#1A2C42] leading-[42px] tracking-tight">
-            What you are looking{"\n"}for today
+            Your Home,{"\n"}Our Priority
           </Text>
         </View>
 
-        <View className="px-6 mb-8">
+        <View
+          className="px-6 mb-8"
+          onTouchStart={(event) => {
+            event.stopPropagation();
+          }}
+        >
           <View className="flex-row items-center bg-white rounded-3xl pl-5 pr-2 py-2 border border-gray-100">
             <TextInput
-              placeholder="Search what you need..."
+              placeholder="Search category"
               placeholderTextColor="#A0AEC0"
+              value={searchText}
+              onChangeText={(text) => {
+                setSearchText(text);
+                setSelectedCategorySlug("");
+                setSearchSubmitted(false);
+                setShowCategorySuggestions(true);
+              }}
+              onFocus={() => setShowCategorySuggestions(true)}
               className="flex-1 text-[15px] font-medium text-[#1A2C42] h-12"
               autoCapitalize="none"
             />
+            <View className="w-px h-6 bg-gray-200 mx-2" />
+            <View className="flex-row items-center px-2">
+              <Ionicons name="location-outline" size={18} color="#2286BE" />
+              <TextInput
+                placeholder="ZIP"
+                placeholderTextColor="#A0AEC0"
+                value={zipCode}
+                onChangeText={(text) => {
+                  setZipCode(text.replace(/\D/g, "").slice(0, 5));
+                  setSearchSubmitted(false);
+                  setShowCategorySuggestions(false);
+                }}
+                keyboardType="number-pad"
+                maxLength={5}
+                className="w-16 text-[15px] font-medium text-[#1A2C42] h-12 ml-2"
+              />
+            </View>
             <TouchableOpacity
-              onPress={() => router.push("/services")}
+              onPress={handleSearch}
               className="bg-[#2B84B1] w-12 h-12 rounded-[18px] items-center justify-center"
             >
               <Ionicons name="search" size={22} color="white" />
             </TouchableOpacity>
           </View>
+
+          {!searchSubmitted && showCategorySuggestions ? (
+            <View className="mt-3 rounded-[24px] border border-gray-100 bg-white overflow-hidden">
+              {categorySuggestions.length ? (
+                <ScrollView nestedScrollEnabled style={{ maxHeight: 224 }} showsVerticalScrollIndicator={true}>
+                  {categorySuggestions.map((category, index) => (
+                    <TouchableOpacity
+                      key={category.id}
+                      onPress={() => {
+                        setSearchText(category.name);
+                        setSelectedCategorySlug(category.slug);
+                        setSearchSubmitted(false);
+                        setShowCategorySuggestions(false);
+                      }}
+                      className={`flex-row items-center justify-between px-5 py-4 ${
+                        index < categorySuggestions.length - 1 ? "border-b border-gray-100" : ""
+                      }`}
+                    >
+                      <Text className="text-[14px] font-bold text-[#1A2C42]">{category.name}</Text>
+                      <Text className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94A3B8]">Category</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : searchText.trim() ? (
+                <View className="px-5 py-4">
+                  <Text className="text-[14px] font-medium text-[#64748B]">No matching category found.</Text>
+                  <TouchableOpacity onPress={openCustomRequestFlow} className="mt-3 self-start rounded-[16px] bg-[#2286BE] px-4 py-3">
+                    <Text className="text-[12px] font-black uppercase tracking-[0.14em] text-white">Request This Service</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {showSearchResults ? (
+            <View className="mt-3 rounded-[24px] border border-gray-100 bg-white overflow-hidden">
+              <View className="px-5 py-3 border-b border-gray-100">
+                <Text className="text-[11px] font-black uppercase tracking-[0.18em] text-[#7C8B95]">
+                  Available gigs in ZIP {extractZipCode(zipCode)}
+                </Text>
+              </View>
+
+              {searchingServices ? (
+                <View className="py-8 items-center justify-center">
+                  <ActivityIndicator color="#2286BE" />
+                </View>
+              ) : searchedServices.length ? (
+                searchedServices.slice(0, 8).map((gig) => (
+                  <TouchableOpacity
+                    key={gig.id}
+                    onPress={() => router.push({ pathname: "/service-details", params: { id: gig.id } })}
+                    className="px-5 py-4 border-b border-gray-100"
+                  >
+                    <Text className="text-[14px] font-bold text-[#1A2C42]">{gig.title || "Untitled gig"}</Text>
+                    <Text className="text-[12px] font-medium text-[#7C8B95] mt-1">
+                      {gig.categoryName || "General"} · ZIP {gig.zipCode || extractZipCode(zipCode)}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              ) : null}
+            </View>
+          ) : null}
+
+          {showNoResultsSuggestion ? (
+            <View className="mt-3 rounded-[24px] bg-[#EAF3FA] px-5 py-4">
+              <Text className="text-[15px] font-black text-[#1A2C42]">Couldn&apos;t find a matching category or gig?</Text>
+              <Text className="text-[13px] leading-[20px] text-[#5F7182] mt-2">
+                Submit a custom request and let Jacob notify admins and nearby providers for you.
+              </Text>
+              <TouchableOpacity onPress={openCustomRequestFlow} className="mt-4 self-start rounded-[16px] bg-[#2286BE] px-4 py-3">
+                <Text className="text-[12px] font-black uppercase tracking-[0.14em] text-white">Request Gig</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {zipCode.length > 0 && !isValidZipCode(zipCode) ? (
+            <Text className="mt-3 text-[12px] font-semibold text-[#DC2626]">Please enter a valid 5-digit zip code.</Text>
+          ) : null}
         </View>
 
         <View className="px-6 mb-8">
@@ -327,7 +504,7 @@ export default function HomePage() {
         </View>
 
         <View className="px-6 mb-12 flex-row justify-between items-center">
-          {categories.map((category) => (
+          {featuredCategories.map((category) => (
             <View key={category.id} className="items-center">
               <TouchableOpacity
                 onPress={() =>

@@ -26,6 +26,13 @@ const ratingOptions = [
   { id: 4.5, label: "4.5+" },
 ];
 
+const slugifySearchTerm = (value: string) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 export default function ServicesPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -208,22 +215,36 @@ export default function ServicesPage() {
               </View>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={
-            isLoading || isFetching ? (
-              <View className="items-center justify-center py-20">
-                <ActivityIndicator size="large" color="#2B84B1" />
-              </View>
-            ) : error ? (
-              <View className="items-center justify-center px-8 py-20">
-                <Text className="text-center text-[#7C8B95] font-medium mb-4">Could not load services.</Text>
-              </View>
-            ) : (
-              <View className="items-center px-8 pt-16 pb-20">
-                <Text className="text-[18px] font-bold text-[#1A2C42] mb-2">No services found</Text>
-                <Text className="text-center text-[#7C8B95]">Try another category, provider type, or search term.</Text>
-              </View>
-            )
-          }
+        ListEmptyComponent={
+          isLoading || isFetching ? (
+            <View className="items-center justify-center py-20">
+              <ActivityIndicator size="large" color="#2B84B1" />
+            </View>
+          ) : error ? (
+            <View className="items-center justify-center px-8 py-20">
+              <Text className="text-center text-[#7C8B95] font-medium mb-4">Could not load services.</Text>
+            </View>
+          ) : (
+            <View className="items-center px-8 pt-16 pb-20">
+              <Text className="text-[18px] font-bold text-[#1A2C42] mb-2">No services found</Text>
+              <Text className="text-center text-[#7C8B95]">Try another category, provider type, or search term.</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/post-request",
+                    params: {
+                      categoryName: search.trim() || title || "Custom Request",
+                      categorySlug: String(categorySlug || slugifySearchTerm(search) || "custom-request"),
+                    },
+                  })
+                }
+                className="mt-5 rounded-[18px] bg-[#2286BE] px-6 py-4"
+              >
+                <Text className="font-bold text-white">Request Gig Instead</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        }
           ListFooterComponent={
             pagination && pagination.totalPages > 1 ? (
               <View className="mx-6 mt-2 mb-8 bg-white rounded-[20px] border border-gray-100 px-4 py-4 flex-row items-center justify-between">

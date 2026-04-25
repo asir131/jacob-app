@@ -34,13 +34,16 @@ import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import {
   useBlockConversationUserMutation,
   useClearConversationHistoryMutation,
+  useCreateCustomOrderProposalMutation,
   useEnsureConversationByOrderMutation,
+  useGetConversationsQuery,
   useGetConversationMessagesQuery,
   useMarkConversationMessagesAsReadMutation,
+  useRespondToCustomOrderProposalMutation,
   useSendConversationMessageMutation,
   useUnblockConversationUserMutation,
 } from "@/src/store/services/apiSlice";
-import type { ChatMessage } from "@/src/types/api";
+import type { ChatMessage, ConversationSummary } from "@/src/types/api";
 
 registerGlobals();
 
@@ -98,6 +101,8 @@ export default function ChatDetailsPage() {
   const params = useLocalSearchParams<{
     conversationId?: string;
     orderId?: string;
+    sourceOrderId?: string;
+    proposalType?: string;
     name?: string;
     avatar?: string;
     info?: string;
@@ -122,6 +127,13 @@ export default function ChatDetailsPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [blockedBy, setBlockedBy] = useState<string | null>(null);
   const [resolvedConversationId, setResolvedConversationId] = useState("");
+  const [showProposalComposer, setShowProposalComposer] = useState(false);
+  const [proposalTitle, setProposalTitle] = useState("");
+  const [proposalDescription, setProposalDescription] = useState("");
+  const [proposalPrice, setProposalPrice] = useState("");
+  const [proposalAddress, setProposalAddress] = useState("");
+  const [proposalDate, setProposalDate] = useState("");
+  const [proposalTime, setProposalTime] = useState("");
 
   const [activeCall, setActiveCall] = useState<CallType | null>(null);
   const [incomingCall, setIncomingCall] = useState<CallInvitePayload | null>(null);
@@ -133,15 +145,26 @@ export default function ChatDetailsPage() {
   const [remoteStreamUrl, setRemoteStreamUrl] = useState<string | null>(null);
   const [ensureConversationByOrder, { isLoading: ensuringConversation }] =
     useEnsureConversationByOrderMutation();
+  const { data: conversationsPayload } = useGetConversationsQuery();
+  const [createCustomOrderProposal, { isLoading: creatingProposal }] = useCreateCustomOrderProposalMutation();
+  const [respondToCustomOrderProposal, { isLoading: respondingProposal }] = useRespondToCustomOrderProposalMutation();
 
   const conversationIdParam = readParam(params.conversationId);
   const orderId = readParam(params.orderId);
+  const sourceOrderIdParam = readParam(params.sourceOrderId);
+  const proposalTypeParam = readParam(params.proposalType);
   const name = readParam(params.name) || "User";
   const avatar = readParam(params.avatar);
   const info = readParam(params.info);
   const blockedByParam = readParam(params.blockedBy);
   const targetUserIdParam = readParam(params.targetUserId);
   const conversationId = resolvedConversationId || conversationIdParam;
+  const conversations = useMemo(() => conversationsPayload?.data || [], [conversationsPayload]);
+  const selectedConversation = useMemo(
+    () => (conversations as ConversationSummary[]).find((item) => item.id === conversationId) || null,
+    [conversationId, conversations]
+  );
+  const selectedGigId = String(selectedConversation?.gigId || "");
 
   const { data, isLoading } = useGetConversationMessagesQuery(
     { conversationId, page: 1, limit: 100 },
@@ -159,6 +182,19 @@ export default function ChatDetailsPage() {
   const isBlockedByMe = Boolean(blockedBy && blockedBy === user?.id);
   const isBlockedByOther = Boolean(blockedBy && blockedBy !== user?.id);
   const canSend = !blockedBy;
+  const repeatSourceOrderId =
+    sourceOrderIdParam ||
+    (selectedConversation?.orderStatus === "completed" && selectedConversation?.orderId
+      ? String(selectedConversation.orderId)
+      : "");
+  const isRepeatProposalMode = proposalTypeParam === "repeat_order" || Boolean(repeatSourceOrderId);
+  const canCreateProposal =
+    user?.role === "provider" &&
+    Boolean(conversationId) &&
+    Boolean(selectedGigId);
+  const canCreateCustomProposal = canCreateProposal && !selectedConversation?.orderId;
+  const canCreateRepeatProposal = canCreateProposal && Boolean(repeatSourceOrderId);
+  const canOpenProposalComposer = canCreateCustomProposal || canCreateRepeatProposal;
   const callDurationLabel = useMemo(() => formatCallDuration(callSeconds), [callSeconds]);
   const callModalVisible = Boolean(activeCall || incomingCall);
   const callTitle =
@@ -624,6 +660,71 @@ export default function ChatDetailsPage() {
     }
   };
 
+  const resetProposalComposer = () => {
+    setProposalTitle("");
+    setProposalDescription("");
+    setProposalPrice("");
+    setProposalAddress("");
+    setProposalDate("");
+    setProposalTime("");
+    setShowProposalComposer(false);
+  };
+
+  const handleCreateProposal = async () => {
+    const numericPrice = Number(proposalPrice);
+    if (!canOpenProposalComposer || !proposalTitle.trim() || !proposalAddress.trim() || !proposalDate || !proposalTime || !Number.isFinite(numericPrice) || numericPrice <= 0) {
+      Alert.alert("Missing fields", `Complete all ${isRepeatProposalMode ? "repeat order" : "custom order"} fields first.`);
+      return;
+    }
+
+    try {
+      const payload = await createCustomOrderProposal({
+        conversationId,
+        gigId: selectedGigId,
+        proposalType: isRepeatProposalMode ? "repeat_order" : "custom",
+        sourceOrderId: repeatSourceOrderId || undefined,
+        title: proposalTitle.trim(),
+        description: proposalDescription.trim(),
+        price: numericPrice,
+        serviceAddress: proposalAddress.trim(),
+        scheduledDate: proposalDate,
+        scheduledTime: proposalTime,
+      }).unwrap();
+      setMessages((current) => {
+        if (current.some((message) => message.id === payload.data.id)) return current;
+        return [...current, payload.data];
+      });
+      resetProposalComposer();
+    } catch (error) {
+      Alert.alert("Could not send request", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const handleRespondProposal = async (proposalId: string, action: "accept" | "decline") => {
+    try {
+      const payload = await respondToCustomOrderProposal({ proposalId, action }).unwrap();
+      const proposalType = payload.data?.message?.customOrderProposal?.proposalType || "custom";
+      if (payload.data?.message) {
+        setMessages((current) => {
+          if (current.some((message) => message.id === payload.data.message.id)) return current;
+          return [...current, payload.data.message];
+        });
+      }
+      Alert.alert(
+        action === "accept" ? "Accepted" : "Declined",
+        action === "accept"
+          ? proposalType === "repeat_order"
+            ? "Repeat order started."
+            : "Custom order started."
+          : proposalType === "repeat_order"
+            ? "Repeat order request declined."
+            : "Custom order request declined."
+      );
+    } catch (error) {
+      Alert.alert("Could not update request", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View className="flex-1 bg-[#F8FAFC]">
@@ -750,6 +851,66 @@ export default function ChatDetailsPage() {
                           {item.text}
                         </Text>
                       ) : null}
+                      {item.customOrderProposal ? (
+                        <View className={`mt-3 rounded-[20px] border px-4 py-4 ${isMe ? "border-white/20 bg-white/10" : "border-[#E2E8F0] bg-[#F8FAFC]"}`}>
+                          <View className="flex-row items-start justify-between">
+                            <View className="flex-1 pr-3">
+                              <Text className={`text-[11px] font-bold uppercase tracking-[2px] ${isMe ? "text-white/70" : "text-[#2286BE]"}`}>
+                                {item.customOrderProposal.proposalType === "repeat_order" ? "Repeat Order" : "Custom Order"}
+                              </Text>
+                              <Text className={`text-[16px] font-bold mt-2 ${isMe ? "text-white" : "text-[#1A2C42]"}`}>
+                                {item.customOrderProposal.title}
+                              </Text>
+                            </View>
+                            <View className={`rounded-full px-3 py-1 ${
+                              item.customOrderProposal.status === "accepted"
+                                ? "bg-emerald-100"
+                                : item.customOrderProposal.status === "declined"
+                                  ? "bg-rose-100"
+                                  : "bg-amber-100"
+                            }`}>
+                              <Text className={`text-[10px] font-bold uppercase ${
+                                item.customOrderProposal.status === "accepted"
+                                  ? "text-emerald-700"
+                                  : item.customOrderProposal.status === "declined"
+                                    ? "text-rose-700"
+                                    : "text-amber-700"
+                              }`}>
+                                {item.customOrderProposal.status}
+                              </Text>
+                            </View>
+                          </View>
+                          {item.customOrderProposal.description ? (
+                            <Text className={`text-[14px] leading-[21px] mt-3 ${isMe ? "text-white/85" : "text-[#5F7182]"}`}>
+                              {item.customOrderProposal.description}
+                            </Text>
+                          ) : null}
+                          <Text className={`text-[14px] font-bold mt-3 ${isMe ? "text-white" : "text-[#1A2C42]"}`}>
+                            ${Number(item.customOrderProposal.price || 0).toFixed(2)}
+                          </Text>
+                          <Text className={`text-[13px] font-medium mt-1 ${isMe ? "text-white/80" : "text-[#5F7182]"}`}>
+                            {item.customOrderProposal.scheduledTime} • {item.customOrderProposal.serviceAddress}
+                          </Text>
+                          {!isMe && user?.role === "client" && item.customOrderProposal.status === "pending" ? (
+                            <View className="flex-row mt-4">
+                              <TouchableOpacity
+                                onPress={() => void handleRespondProposal(item.customOrderProposal!.id, "accept")}
+                                disabled={respondingProposal}
+                                className="flex-1 bg-[#2286BE] rounded-[16px] py-3 items-center mr-2"
+                              >
+                                <Text className="text-white font-bold">Accept</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => void handleRespondProposal(item.customOrderProposal!.id, "decline")}
+                                disabled={respondingProposal}
+                                className="flex-1 bg-white border border-[#CBD5E1] rounded-[16px] py-3 items-center"
+                              >
+                                <Text className="text-[#1A2C42] font-bold">Decline</Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
                       {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
                         <View className={item.text ? "mt-3" : ""}>
                           {item.attachments.map((attachment, index) => {
@@ -831,6 +992,30 @@ export default function ChatDetailsPage() {
           </ScrollView>
         ) : null}
 
+        {canOpenProposalComposer && showProposalComposer ? (
+          <View className="bg-white border-t border-[#F2F2F2] px-6 py-4">
+            <Text className="text-[12px] font-bold uppercase tracking-[2px] text-[#2286BE] mb-3">
+              {isRepeatProposalMode ? "Create Repeat Order" : "Create Custom Order"}
+            </Text>
+            <TextInput value={proposalTitle} onChangeText={setProposalTitle} placeholder="Order title" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
+            <TextInput value={proposalPrice} onChangeText={setProposalPrice} keyboardType="decimal-pad" placeholder="Price" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
+            <TextInput value={proposalAddress} onChangeText={setProposalAddress} placeholder="Service address" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
+            <View className="flex-row mb-3">
+              <TextInput value={proposalDate} onChangeText={setProposalDate} placeholder="YYYY-MM-DD" placeholderTextColor="#7C8B95" className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mr-3 text-[#1A2C42]" />
+              <TextInput value={proposalTime} onChangeText={setProposalTime} placeholder="14:00" placeholderTextColor="#7C8B95" className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] text-[#1A2C42]" />
+            </View>
+            <TextInput value={proposalDescription} onChangeText={setProposalDescription} multiline textAlignVertical="top" placeholder={isRepeatProposalMode ? "Describe the updated repeat order details" : "Describe the custom work"} placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] min-h-[88px] text-[#1A2C42]" />
+            <View className="flex-row mt-4">
+              <TouchableOpacity onPress={() => void handleCreateProposal()} disabled={creatingProposal} className="flex-1 bg-[#2286BE] rounded-[18px] py-4 items-center mr-3">
+                {creatingProposal ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold">{isRepeatProposalMode ? "Send Offer" : "Send Request"}</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={resetProposalComposer} className="px-5 rounded-[18px] border border-[#CBD5E1] items-center justify-center">
+                <Text className="text-[#1A2C42] font-bold">Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         <View
           style={{
             shadowColor: "#000",
@@ -844,6 +1029,14 @@ export default function ChatDetailsPage() {
           }}
           className="bg-white px-6 pt-4 border-t border-[#F2F2F2] flex-row items-center"
         >
+          {canOpenProposalComposer ? (
+            <TouchableOpacity
+              onPress={() => setShowProposalComposer((current) => !current)}
+              className="mr-3 w-[48px] h-[48px] rounded-full bg-[#F8FAFC] items-center justify-center"
+            >
+              <Ionicons name="document-text-outline" size={21} color="#2286BE" />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => void handlePickAttachments()}
             className="mr-3 w-[48px] h-[48px] rounded-full bg-[#EAF3FA] items-center justify-center"

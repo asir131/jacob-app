@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -19,15 +20,18 @@ import {
   useGetPublicServiceByIdQuery,
   useRemoveSavedServiceMutation,
   useSaveServiceMutation,
+  useStartCustomOrderConversationMutation,
 } from "@/src/store/services/apiSlice";
 
 export default function ServiceDetailsPage() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id = "" } = useLocalSearchParams<{ id?: string }>();
   const { isAuthenticated, updateProfile, user } = useAuth();
   const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
   const [saveService, { isLoading: isSavingService }] = useSaveServiceMutation();
   const [removeSavedService, { isLoading: isRemovingSavedService }] = useRemoveSavedServiceMutation();
+  const [startCustomOrderConversation, { isLoading: isStartingCustomOrder }] = useStartCustomOrderConversationMutation();
   const service = data?.data || null;
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedPackage, setSelectedPackage] = useState(0);
@@ -73,6 +77,42 @@ export default function ServiceDetailsPage() {
       return;
     }
     router.push({ pathname: "/book-service", params: { id: service.id, packageName: activePackage.name } });
+  };
+
+  const handleCustomOrder = async () => {
+    if (!service) return;
+    if (!isAuthenticated) {
+      Alert.alert("Sign in required", "Please sign in before requesting a custom order.");
+      router.push("/(auth)/login");
+      return;
+    }
+    if (user?.role !== "client") {
+      Alert.alert("Unavailable", "Only clients can request a custom order.");
+      return;
+    }
+
+    try {
+      const payload = await startCustomOrderConversation({
+        providerId: String(service.provider.id || ""),
+        gigId: String(service.id || ""),
+      }).unwrap();
+      const conversationId = String((payload.data as any)?.conversation?.id || "");
+      if (!conversationId) {
+        throw new Error("Conversation could not be started.");
+      }
+      router.push({
+        pathname: "/chat-details",
+        params: {
+          conversationId,
+          name: service.provider.name,
+          avatar: service.provider.avatar || "",
+          info: service.categoryName || "Custom order",
+          targetUserId: service.provider.id,
+        },
+      });
+    } catch (error) {
+      Alert.alert("Could not start custom order", error instanceof Error ? error.message : "Please try again.");
+    }
   };
 
   if (isLoading) {
@@ -266,7 +306,10 @@ export default function ServiceDetailsPage() {
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100">
+      <View
+        className="absolute bottom-0 w-full bg-white px-6 pt-4 border-t border-gray-100"
+        style={{ paddingBottom: Math.max(insets.bottom + 18, 28) }}
+      >
         <View className="flex-row items-center justify-between mb-3">
           <View>
             <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Selected Package</Text>
@@ -276,6 +319,11 @@ export default function ServiceDetailsPage() {
         </View>
         <TouchableOpacity onPress={() => void handleBookNow()} className="bg-[#2B84B1] py-5 rounded-[18px] items-center">
           <Text className="text-white font-bold text-[17px]">Book Now</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => void handleCustomOrder()} disabled={isStartingCustomOrder} className="items-center pt-3">
+          <Text className="text-[#2B84B1] font-bold text-[14px]">
+            {isStartingCustomOrder ? "Starting custom order..." : "You can create your custom order"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

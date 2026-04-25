@@ -45,6 +45,8 @@ const normalizeTargetPath = (targetPath: string) => {
       params: {
         conversationId: searchParams.get("conversationId") || "",
         orderId: searchParams.get("orderId") || "",
+        sourceOrderId: searchParams.get("sourceOrderId") || "",
+        proposalType: searchParams.get("proposalType") || "",
       },
     } as const;
   }

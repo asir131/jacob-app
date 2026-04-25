@@ -98,6 +98,20 @@ export default function CategoryDetailsPage() {
             <Text className="text-center text-[14px] text-[#7C8B95] mt-2">
               We could not find any published services in this category right now.
             </Text>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/post-request",
+                  params: {
+                    categoryName: title,
+                    categorySlug: slug || "",
+                  },
+                })
+              }
+              className="mt-5 rounded-[18px] bg-[#2286BE] px-6 py-4"
+            >
+              <Text className="font-bold text-white">Request This Service</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { geocodeAddress, resolveAddressFromCoordinates } from "@/src/lib/geocode";
+import { extractZipCode } from "@/src/lib/zip";
 import {
   useCreateServiceRequestMutation,
   useGetCategoriesQuery,
@@ -29,13 +30,31 @@ type PickerAsset = {
   mimeType?: string | null;
 };
 
+const slugifySearchTerm = (value: string) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 export default function PostRequestPage() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    categoryName?: string;
+    categorySlug?: string;
+    zipCode?: string;
+  }>();
   const { isAuthenticated, user } = useAuth();
   const { data: categoriesPayload, isLoading: loadingCategories } = useGetCategoriesQuery();
   const [createServiceRequest, { isLoading: submitting }] = useCreateServiceRequestMutation();
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [serviceAddress, setServiceAddress] = useState(user?.address || "");
+  const queryCategoryName = String(params.categoryName || "").trim();
+  const queryCategorySlug = String(params.categorySlug || "").trim() || slugifySearchTerm(queryCategoryName);
+  const queryZipCode = extractZipCode(String(params.zipCode || ""));
+  const [selectedCategory, setSelectedCategory] = useState(queryCategorySlug || "");
+  const [categoryMode, setCategoryMode] = useState<"existing" | "custom">("existing");
+  const [customCategoryName, setCustomCategoryName] = useState("");
+  const [customCategoryDescription, setCustomCategoryDescription] = useState("");
+  const [serviceAddress, setServiceAddress] = useState(user?.address || (queryZipCode ? `ZIP ${queryZipCode}` : ""));
   const [description, setDescription] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
   const [preferredTime, setPreferredTime] = useState("");
@@ -47,11 +66,48 @@ export default function PostRequestPage() {
   });
   const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
+  const categories = useMemo(() => {
+    const baseCategories = categoriesPayload?.data || [];
+    const hasQueryCategory =
+      queryCategorySlug &&
+      !baseCategories.some((item) => item.slug === queryCategorySlug);
+
+    if (!hasQueryCategory) return baseCategories;
+
+    return [
+      {
+        id: queryCategorySlug,
+        name: queryCategoryName || queryCategorySlug,
+        slug: queryCategorySlug,
+      },
+      ...baseCategories,
+    ];
+  }, [categoriesPayload?.data, queryCategoryName, queryCategorySlug]);
+
   const activeCategory = useMemo(() => {
-    const categories = categoriesPayload?.data || [];
     if (!categories.length) return null;
     return categories.find((item) => item.slug === selectedCategory) || categories[0];
-  }, [categoriesPayload?.data, selectedCategory]);
+  }, [categories, selectedCategory]);
+
+  useEffect(() => {
+    if (!selectedCategory && queryCategorySlug) {
+      setSelectedCategory(queryCategorySlug);
+    }
+  }, [queryCategorySlug, selectedCategory]);
+
+  useEffect(() => {
+    const approvedCategoryItems = categoriesPayload?.data || [];
+    const hasApprovedQueryCategory = approvedCategoryItems.some((item) => item.slug === queryCategorySlug);
+    if (queryCategorySlug && !hasApprovedQueryCategory) {
+      setCategoryMode("custom");
+      setCustomCategoryName((current) => current || queryCategoryName || queryCategorySlug);
+      return;
+    }
+
+    if (queryCategorySlug && hasApprovedQueryCategory) {
+      setCategoryMode("existing");
+    }
+  }, [categoriesPayload?.data, queryCategoryName, queryCategorySlug]);
 
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -101,8 +157,18 @@ export default function PostRequestPage() {
       return;
     }
 
-    if (!activeCategory || !serviceAddress.trim() || !description.trim() || !preferredTime || !budget.trim()) {
+    if (!serviceAddress.trim() || !description.trim() || !preferredTime || !budget.trim()) {
       Alert.alert("Missing fields", "Please complete all required fields.");
+      return;
+    }
+
+    if (categoryMode === "existing" && !activeCategory) {
+      Alert.alert("Missing category", "Please select an existing category.");
+      return;
+    }
+
+    if (categoryMode === "custom" && !customCategoryName.trim()) {
+      Alert.alert("Missing category", "Please enter the custom category you want admin to add.");
       return;
     }
 
@@ -119,8 +185,18 @@ export default function PostRequestPage() {
     }
 
     const formData = new FormData();
-    formData.append("categorySlug", activeCategory.slug);
-    formData.append("categoryName", activeCategory.name);
+    formData.append("requestCustomCategory", String(categoryMode === "custom"));
+    if (categoryMode === "custom") {
+      formData.append("customCategoryName", customCategoryName.trim());
+      if (customCategoryDescription.trim()) {
+        formData.append("customCategoryDescription", customCategoryDescription.trim());
+      }
+      formData.append("categorySlug", slugifySearchTerm(customCategoryName));
+      formData.append("categoryName", customCategoryName.trim());
+    } else if (activeCategory) {
+      formData.append("categorySlug", activeCategory.slug);
+      formData.append("categoryName", activeCategory.name);
+    }
     formData.append("serviceAddress", serviceAddress.trim());
     formData.append("serviceLocationLat", String(finalCoords.lat));
     formData.append("serviceLocationLng", String(finalCoords.lng));
@@ -138,9 +214,15 @@ export default function PostRequestPage() {
 
     try {
       await createServiceRequest(formData).unwrap();
-      Alert.alert("Posted", "Your request has been posted and nearby providers were notified.", [
+      Alert.alert(
+        categoryMode === "custom" ? "Sent for review" : "Posted",
+        categoryMode === "custom"
+          ? "Your custom category request is waiting for admin approval. Once approved, the request will go live."
+          : "Your request has been posted and nearby providers were notified.",
+        [
         { text: "OK", onPress: () => router.back() },
-      ]);
+        ]
+      );
     } catch (error) {
       Alert.alert("Could not submit request", error instanceof Error ? error.message : "Please try again.");
     }
@@ -156,25 +238,77 @@ export default function PostRequestPage() {
       </View>
 
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Service Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
-          {loadingCategories ? (
-            <ActivityIndicator color="#2286BE" />
-          ) : (
-            (categoriesPayload?.data || []).map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                onPress={() => setSelectedCategory(category.slug)}
-                className={`px-4 py-3 rounded-[18px] mr-3 ${(selectedCategory || activeCategory?.slug) === category.slug ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}
-              >
-                <Text className={`font-bold ${(selectedCategory || activeCategory?.slug) === category.slug ? "text-white" : "text-[#1A2C42]"}`}>{category.name}</Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+        <Text className="text-[14px] font-bold uppercase tracking-[0.14em] text-[#1A2C42] mb-3 ml-1">Service Category</Text>
+        <View className="mb-4 flex-row gap-3">
+          <TouchableOpacity
+            onPress={() => setCategoryMode("existing")}
+            className={`flex-1 rounded-[18px] border px-4 py-4 items-center justify-center ${categoryMode === "existing" ? "border-[#2286BE] bg-[#2286BE]/10" : "border-gray-200 bg-white"}`}
+          >
+            <Text className={`text-[12px] text-center font-bold ${categoryMode === "existing" ? "text-[#2286BE]" : "text-[#6B7280]"}`}>
+              Select existing category
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setCategoryMode("custom");
+              setCustomCategoryName((current) => current || queryCategoryName || activeCategory?.name || "");
+            }}
+            className={`flex-1 rounded-[18px] border px-4 py-4 items-center justify-center ${categoryMode === "custom" ? "border-[#2286BE] bg-[#2286BE]/10" : "border-gray-200 bg-white"}`}
+          >
+            <Text className={`text-[12px] text-center font-bold ${categoryMode === "custom" ? "text-[#2286BE]" : "text-[#6B7280]"}`}>
+              Request new category
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {categoryMode === "existing" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
+            {loadingCategories ? (
+              <ActivityIndicator color="#2286BE" />
+            ) : (
+              categories.map((category) => (
+                <TouchableOpacity
+                  key={category.id || category.slug}
+                  onPress={() => setSelectedCategory(category.slug)}
+                  className={`px-4 py-3 rounded-[18px] mr-3 ${(selectedCategory || activeCategory?.slug) === category.slug ? "bg-[#2286BE]" : "bg-white border border-gray-200"}`}
+                >
+                  <Text className={`font-bold ${(selectedCategory || activeCategory?.slug) === category.slug ? "text-white" : "text-[#1A2C42]"}`}>{category.name}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        ) : (
+          <View className="mb-6 rounded-[24px] border border-dashed border-[#2286BE]/30 bg-[#2286BE]/5 p-4">
+            <TextInput
+              value={customCategoryName}
+              onChangeText={setCustomCategoryName}
+              placeholder="Enter the category you want admin to add"
+              placeholderTextColor="#94A3B8"
+              className="bg-white rounded-[18px] border border-gray-200 px-4 py-4 text-[15px] mb-3 text-[#1A2C42]"
+            />
+            <TextInput
+              multiline
+              textAlignVertical="top"
+              value={customCategoryDescription}
+              onChangeText={setCustomCategoryDescription}
+              placeholder="Optional: explain this new category for admin"
+              placeholderTextColor="#94A3B8"
+              className="bg-white rounded-[18px] border border-gray-200 px-4 py-4 text-[15px] min-h-[96px] text-[#1A2C42]"
+            />
+            <Text className="mt-3 text-[12px] font-semibold leading-[18px] text-[#51606C]">
+              Admin will review this category first. Once approved, your request will go live to nearby providers.
+            </Text>
+          </View>
+        )}
 
         <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Service Location</Text>
         <TextInput value={serviceAddress} onChangeText={setServiceAddress} placeholder="Enter exact location" className="bg-white rounded-[18px] px-4 py-4 text-[15px] mb-4" />
+        {queryZipCode ? (
+          <View className="mb-4 self-start rounded-full bg-[#EAF3FA] px-4 py-2">
+            <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2286BE]">
+              Search ZIP {queryZipCode}
+            </Text>
+          </View>
+        ) : null}
         <MapboxLocationPicker
           token={mapboxToken}
           initialCenter={selectedMapCoords}

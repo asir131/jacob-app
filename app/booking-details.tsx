@@ -32,6 +32,7 @@ import {
   useRequestClientRevisionMutation,
   useRespondProviderRevisionMutation,
   useSendClientResolutionMessageMutation,
+  useStartRepeatOrderConversationMutation,
   useSubmitClientOrderReviewMutation,
 } from "@/src/store/services/apiSlice";
 
@@ -72,6 +73,7 @@ export default function BookingDetailsPage() {
   const [checkoutSessionId, setCheckoutSessionId] = useState("");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [handledSessionId, setHandledSessionId] = useState("");
+  const [pendingPaymentSuccess, setPendingPaymentSuccess] = useState(false);
   const checkoutConfirmingRef = useRef(false);
   const completedCheckoutSessionRef = useRef("");
 
@@ -86,6 +88,7 @@ export default function BookingDetailsPage() {
     refetchOnReconnect: true,
   });
   const [ensureConversationByOrder] = useEnsureConversationByOrderMutation();
+  const [startRepeatOrderConversation, { isLoading: startingRepeatOrder }] = useStartRepeatOrderConversationMutation();
   const [createCheckoutSession, { isLoading: creatingCheckout }] = useCreateClientCheckoutSessionMutation();
   const [confirmCheckoutPayment, { isLoading: confirmingCheckout }] = useConfirmClientCheckoutPaymentMutation();
   const [requestClientRevision, { isLoading: requestingRevision }] = useRequestClientRevisionMutation();
@@ -101,6 +104,21 @@ export default function BookingDetailsPage() {
     setReviewText(order?.clientReview || "");
     setRating(Number(order?.clientRating || 0));
   }, [order?.clientRating, order?.clientReview]);
+
+  useEffect(() => {
+    if (role !== "client" || !pendingPaymentSuccess || !order) return;
+    if (order.paymentStatus !== "paid" || order.status !== "completed") return;
+
+    setPendingPaymentSuccess(false);
+
+    if (!order.clientRating) {
+      setActiveModal("review");
+      Alert.alert("Payment completed", "Payment completed successfully. Please rate your provider.");
+      return;
+    }
+
+    Alert.alert("Payment completed", "Your order payment was completed successfully.");
+  }, [order, pendingPaymentSuccess, role]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,6 +184,7 @@ export default function BookingDetailsPage() {
     order?.paymentStatus === "paid" &&
     !["after_sell_revision_requested", "under_after_sell_revision"].includes(order?.status || "");
   const canReview = role !== "provider" && order?.status === "completed" && !order?.clientRating;
+  const canRepeatOrder = role !== "provider" && order?.status === "completed";
   const canCancelRevision =
     role !== "provider" &&
     ["revision_requested", "under_revision", "after_sell_revision_requested", "under_after_sell_revision"].includes(order?.status || "");
@@ -176,6 +195,7 @@ export default function BookingDetailsPage() {
     role === "provider" &&
     ["accepted", "under_revision", "accepting_delivery", "under_after_sell_revision"].includes(order?.status || "");
   const submitting = requestingRevision;
+  const repeatOrderCount = Math.max(1, Number(order?.repeatOrderCount || order?.repeatIteration || 1));
 
   const openChat = async () => {
     if (!order || !person) return;
@@ -217,8 +237,40 @@ export default function BookingDetailsPage() {
       setCheckoutSessionId(nextSessionId);
       setCheckoutUrl(nextCheckoutUrl);
       setActiveModal("checkout");
+      setPendingPaymentSuccess(false);
     } catch (error) {
       Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const requestRepeatOrder = async () => {
+    if (!order || role === "provider") return;
+
+    try {
+      const payload = await startRepeatOrderConversation({ sourceOrderId: order.id }).unwrap();
+      const conversation = payload.data?.conversation;
+      const conversationId = String(conversation?.id || "");
+      if (!conversationId) {
+        Alert.alert("Conversation unavailable", "We could not open the repeat order chat right now.");
+        return;
+      }
+
+      router.push({
+        pathname: "/chat-details",
+        params: {
+          conversationId,
+          orderId: order.id,
+          sourceOrderId: order.id,
+          proposalType: "repeat_order",
+          name: person?.name || "Provider",
+          avatar: person?.avatar || "",
+          info: order.orderName,
+          blockedBy: "",
+          targetUserId: person?.id || "",
+        },
+      });
+    } catch (error) {
+      Alert.alert("Request failed", getApiErrorMessage(error));
     }
   };
 
@@ -279,15 +331,8 @@ export default function BookingDetailsPage() {
       setCheckoutUrl("");
       setCheckoutSessionId("");
       completedCheckoutSessionRef.current = sessionId;
-      router.replace({ pathname: "/booking-details", params: { id: order.id, role: "client" } });
+      setPendingPaymentSuccess(true);
       await clientQuery.refetch();
-
-      if (!order.clientRating) {
-        setActiveModal("review");
-        Alert.alert("Payment completed", "Payment completed successfully. Please rate your provider.");
-      } else {
-        Alert.alert("Payment completed", "Your order payment was completed successfully.");
-      }
     } catch (error) {
       const message = getApiErrorMessage(error);
       if (message === "Payment has not been completed yet." || message === "Order not found.") {
@@ -298,25 +343,19 @@ export default function BookingDetailsPage() {
           setCheckoutUrl("");
           setCheckoutSessionId("");
           completedCheckoutSessionRef.current = sessionId;
-          router.replace({ pathname: "/booking-details", params: { id: order.id, role: "client" } });
-
-          if (!refreshedOrder?.clientRating) {
-            setActiveModal("review");
-            Alert.alert("Payment completed", "Payment completed successfully. Please rate your provider.");
-          } else {
-            Alert.alert("Payment completed", "Your order payment was completed successfully.");
-          }
+          setPendingPaymentSuccess(true);
           return;
         }
       }
 
       Alert.alert("Confirmation failed", message);
+      setPendingPaymentSuccess(false);
       setHandledSessionId("");
     } finally {
       checkoutConfirmingRef.current = false;
       setConfirmingPayment(false);
     }
-  }, [checkoutSessionId, clientQuery, confirmCheckoutPayment, handledSessionId, order, router]);
+  }, [checkoutSessionId, clientQuery, confirmCheckoutPayment, handledSessionId, order]);
 
   const handleCheckoutRequest = (url?: string) => {
     if (!url) return true;
@@ -488,6 +527,13 @@ export default function BookingDetailsPage() {
             <View className="flex-1 pr-4">
               <Text className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#A0AEC0]">{order.orderNumber}</Text>
               <Text className="text-[24px] font-black text-[#1A2C42] mt-2">{order.orderName}</Text>
+              {repeatOrderCount > 1 ? (
+                <View className="self-start mt-3 px-3 py-2 rounded-full bg-[#EAF3FA]">
+                  <Text className="text-[11px] font-bold tracking-[0.16em] uppercase text-[#2286BE]">
+                    Ordered {repeatOrderCount} Times
+                  </Text>
+                </View>
+              ) : null}
             </View>
             <View className="bg-[#EAF6ED] px-4 py-2 rounded-full">
               <Text className="text-[12px] font-bold text-[#55A06F] uppercase">{formatStatusLabel(order.status)}</Text>
@@ -686,31 +732,47 @@ export default function BookingDetailsPage() {
             </TouchableOpacity>
           </>
         ) : (
-          <View className="flex-row">
-            <TouchableOpacity onPress={() => void openChat()} className="bg-[#EAF3FA] flex-1 py-5 rounded-[18px] mr-4 items-center">
-              <Text className="text-[#2B84B1] font-bold text-[17px]">Message</Text>
-            </TouchableOpacity>
-            {canRequestAfterSellRevision ? (
+          <View>
+            <View className={canRequestAfterSellRevision || canReview ? "flex-row" : ""}>
               <TouchableOpacity
-                onPress={() => {
-                  setRevisionMode("after_sell");
-                  setActiveModal("revision");
-                }}
-                className="bg-[#F59E0B] flex-1 py-5 rounded-[18px] items-center justify-center"
+                onPress={() => void openChat()}
+                className={`bg-[#EAF3FA] py-5 rounded-[18px] items-center ${canRequestAfterSellRevision || canReview ? "flex-1 mr-4" : ""}`}
               >
-                <Text className="text-white font-bold text-[15px] text-center leading-[20px]">
-                  After-Sale Revision
-                </Text>
+                <Text className="text-[#2B84B1] font-bold text-[17px]">Message</Text>
               </TouchableOpacity>
-            ) : canReview ? (
-              <TouchableOpacity onPress={() => setActiveModal("review")} className="bg-[#2B84B1] flex-1 py-5 rounded-[18px] items-center justify-center">
-                <Text className="text-white font-bold text-[15px] text-center leading-[20px]">Leave Review</Text>
+              {canRequestAfterSellRevision ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setRevisionMode("after_sell");
+                    setActiveModal("revision");
+                  }}
+                  className="bg-[#F59E0B] flex-1 py-5 rounded-[18px] items-center justify-center"
+                >
+                  <Text className="text-white font-bold text-[15px] text-center leading-[20px]">
+                    After-Sale Revision
+                  </Text>
+                </TouchableOpacity>
+              ) : canReview ? (
+                <TouchableOpacity onPress={() => setActiveModal("review")} className="bg-[#2B84B1] flex-1 py-5 rounded-[18px] items-center justify-center">
+                  <Text className="text-white font-bold text-[15px] text-center leading-[20px]">Leave Review</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {canRepeatOrder ? (
+              <TouchableOpacity
+                onPress={() => void requestRepeatOrder()}
+                disabled={startingRepeatOrder}
+                className="bg-[#1A2C42] mt-3 py-5 rounded-[18px] items-center justify-center"
+              >
+                {startingRepeatOrder ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-[15px] text-center leading-[20px]">
+                    Order This Again
+                  </Text>
+                )}
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => router.push("/resolution-center" as never)} className="bg-gray-200 flex-1 py-5 rounded-[18px] items-center justify-center">
-                <Text className="text-[#1A2C42] font-bold text-[15px] text-center leading-[20px]">Resolution Center</Text>
-              </TouchableOpacity>
-            )}
+            ) : null}
           </View>
         )}
       </View>

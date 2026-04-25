@@ -184,6 +184,11 @@ export type OrderSummary = {
   id: string;
   orderNumber: string;
   conversationId?: string | null;
+  repeatRootOrderId?: string | null;
+  repeatSourceOrderId?: string | null;
+  repeatIteration?: number;
+  repeatOrderCount?: number;
+  canRequestRepeatOrder?: boolean;
   orderName: string;
   categoryName: string;
   status: string;
@@ -314,6 +319,15 @@ export type ServiceRequestSummary = {
   requestNumber: string;
   categorySlug: string;
   categoryName: string;
+  requestSource?: "existing_category" | "custom_category";
+  requestType?: "custom" | "matched";
+  customCategoryName?: string;
+  customCategoryDescription?: string;
+  customCategoryApprovalStatus?: "not_requested" | "pending" | "approved" | "rejected";
+  customCategoryRequestedAt?: string | null;
+  customCategoryReviewedAt?: string | null;
+  customCategoryRejectionReason?: string;
+  pendingAdminCategoryApproval?: boolean;
   serviceAddress: string;
   serviceLocationLat?: number | null;
   serviceLocationLng?: number | null;
@@ -349,8 +363,10 @@ export type ServiceRequestSummary = {
 export type ConversationSummary = {
   id: string;
   orderId?: string | null;
+  gigId?: string | null;
   orderNumber?: string;
   orderName?: string;
+  orderStatus?: string;
   packageTitle?: string;
   categoryName?: string;
   blockedBy?: string | null;
@@ -365,18 +381,44 @@ export type ConversationSummary = {
   };
 };
 
+export type CustomOrderProposal = {
+  id: string;
+  conversationId?: string | null;
+  gigId?: string | null;
+  clientId?: string | null;
+  providerId?: string | null;
+  proposalType?: "custom" | "repeat_order";
+  sourceOrderId?: string | null;
+  repeatRootOrderId?: string | null;
+  repeatIteration?: number;
+  title: string;
+  description?: string;
+  price: number;
+  serviceAddress: string;
+  scheduledDate?: string | null;
+  scheduledTime: string;
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  respondedAt?: string | null;
+  createdOrderId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type ChatMessage = {
   id: string;
   conversationId: string;
+  orderId?: string | null;
   senderId: string;
   receiverId: string;
   text: string;
+  messageType?: "text" | "custom_order_proposal" | "system";
   attachments: {
     url: string;
     fileName?: string;
     mimeType?: string;
     resourceType?: string;
   }[];
+  customOrderProposal?: CustomOrderProposal | null;
   createdAt: string;
   readAt?: string | null;
 };

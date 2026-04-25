@@ -361,6 +361,28 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ["Chats"],
     }),
+    startCustomOrderConversation: builder.mutation<
+      ApiEnvelope<{ conversation: ConversationSummary; message: ChatMessage }>,
+      { providerId: string; gigId: string }
+    >({
+      query: (payload) => ({
+        url: "/api/chats/conversations/custom-order/start",
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["Chats"],
+    }),
+    startRepeatOrderConversation: builder.mutation<
+      ApiEnvelope<{ conversation: ConversationSummary; message: ChatMessage }>,
+      { sourceOrderId: string }
+    >({
+      query: (payload) => ({
+        url: "/api/chats/conversations/repeat-order/start",
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["Chats"],
+    }),
     getConversationMessages: builder.query<
       ApiEnvelope<Paginated<ChatMessage>>,
       { conversationId: string; page?: number; limit?: number }
@@ -383,6 +405,39 @@ export const apiSlice = createApi({
         body: formData,
       }),
       invalidatesTags: (_result, _error, arg) => [{ type: "Chats", id: arg.conversationId }, "Chats"],
+    }),
+    createCustomOrderProposal: builder.mutation<
+      ApiEnvelope<ChatMessage>,
+      {
+        conversationId: string;
+        gigId: string;
+        proposalType?: "custom" | "repeat_order";
+        sourceOrderId?: string;
+        title: string;
+        description?: string;
+        price: number;
+        serviceAddress: string;
+        scheduledDate: string;
+        scheduledTime: string;
+      }
+    >({
+      query: ({ conversationId, ...payload }) => ({
+        url: `/api/chats/conversations/${conversationId}/custom-order-proposals`,
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [{ type: "Chats", id: arg.conversationId }, "Chats", "Orders"],
+    }),
+    respondToCustomOrderProposal: builder.mutation<
+      ApiEnvelope<{ message: ChatMessage; order: { id: string; orderNumber: string } | null }>,
+      { proposalId: string; action: "accept" | "decline" }
+    >({
+      query: ({ proposalId, action }) => ({
+        url: `/api/chats/custom-order-proposals/${proposalId}/respond`,
+        method: "PATCH",
+        body: { action },
+      }),
+      invalidatesTags: ["Chats", "Orders"],
     }),
     markConversationMessagesAsRead: builder.mutation<
       ApiEnvelope<{ modifiedCount?: number }>,
@@ -625,8 +680,12 @@ export const {
   useFinalizeClientOrderMutation,
   useGetConversationsQuery,
   useEnsureConversationByOrderMutation,
+  useStartCustomOrderConversationMutation,
+  useStartRepeatOrderConversationMutation,
   useGetConversationMessagesQuery,
   useSendConversationMessageMutation,
+  useCreateCustomOrderProposalMutation,
+  useRespondToCustomOrderProposalMutation,
   useMarkConversationMessagesAsReadMutation,
   useMarkAllMessagesAsReadMutation,
   useClearConversationHistoryMutation,
