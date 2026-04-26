@@ -181,6 +181,17 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ["ServiceRequests", "Orders"],
     }),
+    respondToAdminServiceRequestInvitation: builder.mutation<
+      ApiEnvelope<{ request?: ServiceRequestSummary; conversationId?: string }>,
+      { id: string; action: "accept" | "decline" }
+    >({
+      query: ({ id, action }) => ({
+        url: `/api/service-requests/provider/${id}/admin-invitation/respond`,
+        method: "PATCH",
+        body: { action },
+      }),
+      invalidatesTags: ["ServiceRequests", "Orders", "Chats"],
+    }),
     ignoreServiceRequest: builder.mutation<ApiEnvelope<unknown>, string>({
       query: (id) => ({
         url: `/api/service-requests/provider/${id}/ignore`,
@@ -410,7 +421,7 @@ export const apiSlice = createApi({
       ApiEnvelope<ChatMessage>,
       {
         conversationId: string;
-        gigId: string;
+        gigId?: string;
         proposalType?: "custom" | "repeat_order";
         sourceOrderId?: string;
         title: string;
@@ -661,6 +672,7 @@ export const {
   useGetClientServiceRequestsQuery,
   useGetProviderServiceRequestsQuery,
   useAcceptServiceRequestMutation,
+  useRespondToAdminServiceRequestInvitationMutation,
   useIgnoreServiceRequestMutation,
   useGetClientOrdersQuery,
   useGetProviderOrdersQuery,

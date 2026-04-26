@@ -21,6 +21,9 @@ const normalizeTargetPath = (targetPath: string) => {
   }
 
   if (pathname === "/client/orders") {
+    if (searchParams.get("tab") === "requested") {
+      return "/client-requests" as const;
+    }
     return "/(tabs)/booking" as const;
   }
 

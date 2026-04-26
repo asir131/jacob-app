@@ -286,7 +286,7 @@ export default function HomePage() {
                 <ScrollView nestedScrollEnabled style={{ maxHeight: 224 }} showsVerticalScrollIndicator={true}>
                   {categorySuggestions.map((category, index) => (
                     <TouchableOpacity
-                      key={category.id}
+                      key={String(category.id || category.slug || category.name || index)}
                       onPress={() => {
                         setSearchText(category.name);
                         setSelectedCategorySlug(category.slug);
@@ -326,9 +326,9 @@ export default function HomePage() {
                   <ActivityIndicator color="#2286BE" />
                 </View>
               ) : searchedServices.length ? (
-                searchedServices.slice(0, 8).map((gig) => (
+                searchedServices.slice(0, 8).map((gig, index) => (
                   <TouchableOpacity
-                    key={gig.id}
+                    key={String(gig.id || gig.slug || gig.title || index)}
                     onPress={() => router.push({ pathname: "/service-details", params: { id: gig.id } })}
                     className="px-5 py-4 border-b border-gray-100"
                   >
@@ -504,8 +504,8 @@ export default function HomePage() {
         </View>
 
         <View className="px-6 mb-12 flex-row justify-between items-center">
-          {featuredCategories.map((category) => (
-            <View key={category.id} className="items-center">
+          {featuredCategories.map((category, index) => (
+            <View key={String(category.id || category.slug || category.name || index)} className="items-center">
               <TouchableOpacity
                 onPress={() =>
                   router.push({ pathname: "/category-details", params: { name: category.name, slug: category.slug } })
@@ -540,9 +540,9 @@ export default function HomePage() {
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-6">
-            {services.map((item) => (
+            {services.map((item, index) => (
               <TouchableOpacity
-                key={item.id}
+                key={String(item.id || item.slug || item.title || index)}
                 onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })}
                 className="w-[172px] mr-5"
               >
@@ -667,8 +667,11 @@ export default function HomePage() {
               <Ionicons name="chevron-forward" size={14} color="#2B84B1" />
             </TouchableOpacity>
           </View>
-          {faqs.map((faq) => (
-            <View key={faq.id} className="bg-white rounded-[22px] px-5 py-5 border border-gray-100 shadow-sm shadow-black/5 mb-3">
+          {faqs.map((faq, index) => (
+            <View
+              key={String(faq.id || faq.question || index)}
+              className="bg-white rounded-[22px] px-5 py-5 border border-gray-100 shadow-sm shadow-black/5 mb-3"
+            >
               <Text className="text-[16px] font-bold text-[#1A2C42]">{faq.question}</Text>
               <Text className="text-[14px] leading-[22px] text-[#5F7182] mt-2" numberOfLines={3}>
                 {faq.answer}

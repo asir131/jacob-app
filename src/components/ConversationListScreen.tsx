@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatDateLabel } from "@/src/lib/formatters";
 import { useGetConversationsQuery } from "@/src/store/services/apiSlice";
 
@@ -42,6 +43,7 @@ const getQueryErrorMessage = (error: unknown, fallback: string) => {
 
 export function ConversationListScreen() {
   const router = useRouter();
+  const { socket } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [activeTab, setActiveTab] = useState("All");
@@ -56,6 +58,26 @@ export function ConversationListScreen() {
     useCallback(() => {
       void refetch();
     }, [refetch])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!socket) return;
+
+      const handleConversationRefresh = () => {
+        void refetch();
+      };
+
+      socket.on("chat:message:new", handleConversationRefresh);
+      socket.on("chat:conversation:updated", handleConversationRefresh);
+      socket.on("notification:new", handleConversationRefresh);
+
+      return () => {
+        socket.off("chat:message:new", handleConversationRefresh);
+        socket.off("chat:conversation:updated", handleConversationRefresh);
+        socket.off("notification:new", handleConversationRefresh);
+      };
+    }, [refetch, socket])
   );
 
   const filtered = useMemo(() => {

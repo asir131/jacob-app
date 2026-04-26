@@ -21,6 +21,7 @@ import {
   useAcceptServiceRequestMutation,
   useGetProviderServiceRequestsQuery,
   useIgnoreServiceRequestMutation,
+  useRespondToAdminServiceRequestInvitationMutation,
 } from "@/src/store/services/apiSlice";
 import type { ServiceRequestSummary } from "@/src/types/api";
 
@@ -45,6 +46,7 @@ export default function ProviderRequestsPage() {
   );
   const [acceptServiceRequest, { isLoading: accepting }] = useAcceptServiceRequestMutation();
   const [ignoreServiceRequest, { isLoading: ignoring }] = useIgnoreServiceRequestMutation();
+  const [respondToAdminInvitation, { isLoading: respondingAdminInvitation }] = useRespondToAdminServiceRequestInvitationMutation();
   const items = (data?.data.items || []) as ServiceRequestSummary[];
   const pagination = data?.data.pagination;
 
@@ -63,7 +65,10 @@ export default function ProviderRequestsPage() {
         notificationType === "service_request_created" ||
         notificationType === "service_request_accepted" ||
         notificationType === "service_request_cancelled" ||
-        notificationType === "order_created";
+        notificationType === "order_created" ||
+        notificationType === "admin_service_request_invitation" ||
+        notificationType === "admin_service_request_unavailable" ||
+        notificationType === "service_request_negotiation_started_provider";
 
       if (relevantType || !notificationType) {
         void refetch();
@@ -77,12 +82,27 @@ export default function ProviderRequestsPage() {
     };
   }, [refetch, socket]);
 
-  const acceptItem = async (id: string) => {
+  const acceptItem = async (item: ServiceRequestSummary) => {
     try {
-      setActingRequestId(id);
-      await acceptServiceRequest(id).unwrap();
+      setActingRequestId(item.id);
+      if (item.adminRequestedForViewer) {
+        const payload = await respondToAdminInvitation({ id: item.id, action: "accept" }).unwrap();
+        if (payload.data?.conversationId) {
+          router.push({
+            pathname: "/chat-details",
+            params: {
+              conversationId: payload.data.conversationId,
+              name: item.client.name || "Client",
+              role: "provider",
+            },
+          });
+          return;
+        }
+      } else {
+        await acceptServiceRequest(item.id).unwrap();
+      }
       refetch();
-      Alert.alert("Accepted", "Service request accepted successfully.");
+      Alert.alert("Accepted", item.adminRequestedForViewer ? "Negotiation started with the client." : "Service request accepted successfully.");
     } catch (error) {
       Alert.alert("Accept failed", error instanceof Error ? error.message : "Please try again.");
     } finally {
@@ -90,10 +110,14 @@ export default function ProviderRequestsPage() {
     }
   };
 
-  const ignoreItem = async (id: string) => {
+  const ignoreItem = async (item: ServiceRequestSummary) => {
     try {
-      setActingRequestId(id);
-      await ignoreServiceRequest(id).unwrap();
+      setActingRequestId(item.id);
+      if (item.adminRequestedForViewer) {
+        await respondToAdminInvitation({ id: item.id, action: "decline" }).unwrap();
+      } else {
+        await ignoreServiceRequest(item.id).unwrap();
+      }
       refetch();
     } catch (error) {
       Alert.alert("Ignore failed", error instanceof Error ? error.message : "Please try again.");
@@ -169,8 +193,10 @@ export default function ProviderRequestsPage() {
                       <Text className="text-[21px] font-black text-[#1A2C42] mt-2">{item.categoryName}</Text>
                       <Text className="text-[13px] text-[#7C8B95] mt-2">{item.serviceAddress}</Text>
                     </View>
-                    <View className="px-3 py-2 rounded-full bg-[#EAF3FA]">
-                      <Text className="text-[11px] font-bold uppercase text-[#2286BE]">Open</Text>
+                    <View className={`px-3 py-2 rounded-full ${item.assignedToOtherProvider ? "bg-slate-100" : item.adminRequestedForViewer ? "bg-indigo-50" : "bg-[#EAF3FA]"}`}>
+                      <Text className={`text-[11px] font-bold uppercase ${item.assignedToOtherProvider ? "text-slate-500" : item.adminRequestedForViewer ? "text-indigo-600" : "text-[#2286BE]"}`}>
+                        {item.assignedToOtherProvider ? "Taken" : item.adminRequestedForViewer ? "Admin Request" : "Open"}
+                      </Text>
                     </View>
                   </View>
 
@@ -203,7 +229,11 @@ export default function ProviderRequestsPage() {
                     </View>
                   </View>
 
-                  {typeof item.distanceKm === "number" ? (
+                  {item.assignedToOtherProvider ? (
+                    <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-amber-600 mt-4">
+                      Already accepted by another provider
+                    </Text>
+                  ) : typeof item.distanceKm === "number" ? (
                     <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#2286BE] mt-4">
                       {formatMilesFromKm(item.distanceKm)} away
                     </Text>
@@ -211,25 +241,25 @@ export default function ProviderRequestsPage() {
 
                   <View className="flex-row mt-5">
                     <TouchableOpacity
-                      onPress={() => void ignoreItem(item.id)}
-                      disabled={ignoring && actingRequestId === item.id}
+                      onPress={() => void ignoreItem(item)}
+                      disabled={(ignoring || respondingAdminInvitation) && actingRequestId === item.id}
                       className="flex-1 bg-[#F8FAFC] py-4 rounded-[18px] items-center justify-center mr-3"
                     >
-                      {ignoring && actingRequestId === item.id ? (
+                      {(ignoring || respondingAdminInvitation) && actingRequestId === item.id ? (
                         <ActivityIndicator color="#1A2C42" />
                       ) : (
-                        <Text className="font-bold text-[#1A2C42]">Ignore</Text>
+                        <Text className="font-bold text-[#1A2C42]">{item.adminRequestedForViewer ? "Decline" : "Ignore"}</Text>
                       )}
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => void acceptItem(item.id)}
-                      disabled={accepting && actingRequestId === item.id}
+                      onPress={() => void acceptItem(item)}
+                      disabled={item.assignedToOtherProvider || ((accepting || respondingAdminInvitation) && actingRequestId === item.id)}
                       className="flex-1 bg-[#2286BE] py-4 rounded-[18px] items-center justify-center"
                     >
-                      {accepting && actingRequestId === item.id ? (
+                      {(accepting || respondingAdminInvitation) && actingRequestId === item.id ? (
                         <ActivityIndicator color="white" />
                       ) : (
-                        <Text className="font-bold text-white">Accept</Text>
+                        <Text className="font-bold text-white">{item.adminRequestedForViewer ? "Negotiate" : "Accept"}</Text>
                       )}
                     </TouchableOpacity>
                   </View>

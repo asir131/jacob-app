@@ -190,8 +190,7 @@ export default function ChatDetailsPage() {
   const isRepeatProposalMode = proposalTypeParam === "repeat_order" || Boolean(repeatSourceOrderId);
   const canCreateProposal =
     user?.role === "provider" &&
-    Boolean(conversationId) &&
-    Boolean(selectedGigId);
+    Boolean(conversationId);
   const canCreateCustomProposal = canCreateProposal && !selectedConversation?.orderId;
   const canCreateRepeatProposal = canCreateProposal && Boolean(repeatSourceOrderId);
   const canOpenProposalComposer = canCreateCustomProposal || canCreateRepeatProposal;
@@ -680,7 +679,7 @@ export default function ChatDetailsPage() {
     try {
       const payload = await createCustomOrderProposal({
         conversationId,
-        gigId: selectedGigId,
+        gigId: selectedGigId || undefined,
         proposalType: isRepeatProposalMode ? "repeat_order" : "custom",
         sourceOrderId: repeatSourceOrderId || undefined,
         title: proposalTitle.trim(),

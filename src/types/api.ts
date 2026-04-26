@@ -338,7 +338,13 @@ export type ServiceRequestSummary = {
   imageUrls?: string[];
   status: "open" | "accepted" | "cancelled";
   acceptedAt?: string | null;
+  acceptedVia?: "direct" | "admin_invitation" | "";
   distanceKm?: number | null;
+  adminRequestedForViewer?: boolean;
+  adminInvitationStatus?: "pending" | "accepted" | "declined" | "expired" | "unavailable" | "";
+  adminInvitedAt?: string | null;
+  assignedToOtherProvider?: boolean;
+  pendingInvitationCount?: number;
   client: {
     id: string;
     name: string;
@@ -364,6 +370,7 @@ export type ConversationSummary = {
   id: string;
   orderId?: string | null;
   gigId?: string | null;
+  serviceRequestId?: string | null;
   orderNumber?: string;
   orderName?: string;
   orderStatus?: string;
@@ -384,6 +391,7 @@ export type ConversationSummary = {
 export type CustomOrderProposal = {
   id: string;
   conversationId?: string | null;
+  serviceRequestId?: string | null;
   gigId?: string | null;
   clientId?: string | null;
   providerId?: string | null;
