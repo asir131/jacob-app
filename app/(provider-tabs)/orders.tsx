@@ -19,9 +19,11 @@ import {
   useAcceptProviderOrderMutation,
   useDeclineProviderOrderMutation,
   useGetProviderOrdersQuery,
+  useGetProviderServiceRequestsQuery,
+  useRespondToAdminServiceRequestInvitationMutation,
   useRespondProviderRevisionMutation,
 } from "@/src/store/services/apiSlice";
-import type { OrderSummary } from "@/src/types/api";
+import type { OrderSummary, ServiceRequestSummary } from "@/src/types/api";
 
 const filters = [
   { id: "all", label: "All" },
@@ -41,6 +43,8 @@ export default function ProviderOrders() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [requestsPage, setRequestsPage] = useState(1);
+  const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const {
     data,
     isLoading,
@@ -59,16 +63,42 @@ export default function ProviderOrders() {
       pollingInterval: 15000,
     }
   );
+  const {
+    data: requestsData,
+    refetch: refetchRequests,
+  } = useGetProviderServiceRequestsQuery(
+    {
+      page: requestsPage,
+      limit: 8,
+      radiusKm: 30,
+      search,
+    },
+    {
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      pollingInterval: 15000,
+    }
+  );
   const [acceptProviderOrder, { isLoading: accepting }] = useAcceptProviderOrderMutation();
   const [declineProviderOrder, { isLoading: declining }] = useDeclineProviderOrderMutation();
   const [respondProviderRevision, { isLoading: respondingRevision }] = useRespondProviderRevisionMutation();
+  const [respondToAdminInvitation, { isLoading: respondingAdminInvitation }] =
+    useRespondToAdminServiceRequestInvitationMutation();
   const orders = useMemo(() => ((data?.data.items || []) as OrderSummary[]), [data?.data.items]);
+  const adminRequestedOrders = useMemo(
+    () =>
+      (((requestsData?.data.items || []) as ServiceRequestSummary[]).filter(
+        (item) => item.adminRequestedForViewer && !item.assignedToOtherProvider
+      ) || []),
+    [requestsData?.data.items]
+  );
   const pagination = data?.data.pagination;
 
   useFocusEffect(
     useCallback(() => {
       void refetch();
-    }, [refetch])
+      void refetchRequests();
+    }, [refetch, refetchRequests])
   );
 
   useEffect(() => {
@@ -87,8 +117,14 @@ export default function ProviderOrders() {
         notificationType === "order_revision_cancelled" ||
         notificationType === "order_paid";
 
-      if (relevantType || !notificationType) {
+      const requestRelevantType =
+        notificationType === "admin_service_request_invitation" ||
+        notificationType === "admin_service_request_unavailable" ||
+        notificationType === "service_request_negotiation_started_provider";
+
+      if (relevantType || requestRelevantType || !notificationType) {
         void refetch();
+        void refetchRequests();
       }
     };
 
@@ -99,7 +135,7 @@ export default function ProviderOrders() {
       socket.off("notification:new", handleRealtimeRefresh);
       socket.off("chat:conversation:updated", handleRealtimeRefresh);
     };
-  }, [refetch, socket]);
+  }, [refetch, refetchRequests, socket]);
 
   const summary = useMemo(
     () => ({
@@ -124,6 +160,27 @@ export default function ProviderOrders() {
   const handleRevisionResponse = async (id: string, action: "accept" | "decline") => {
     await respondProviderRevision({ id, action }).unwrap();
     refetch();
+  };
+
+  const handleAdminRequestResponse = async (requestId: string, action: "accept" | "decline", clientName?: string) => {
+    try {
+      setActingRequestId(requestId);
+      const payload = await respondToAdminInvitation({ id: requestId, action }).unwrap();
+      await refetchRequests();
+      if (action === "accept" && payload.data?.conversationId) {
+        router.push({
+          pathname: "/chat-details",
+          params: {
+            conversationId: payload.data.conversationId,
+            name: clientName || "Client",
+            role: "provider",
+          },
+        });
+        return;
+      }
+    } finally {
+      setActingRequestId(null);
+    }
   };
 
   return (
@@ -211,6 +268,97 @@ export default function ProviderOrders() {
           </View>
         ) : (
           <View className="px-6">
+            {adminRequestedOrders.length ? (
+              <View className="mb-6">
+                <View className="flex-row items-center justify-between mb-4">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-[18px] font-black text-[#1A2C42]">Admin Requested Orders</Text>
+                    <Text className="text-[13px] text-[#7C8B95] mt-1">
+                      Review admin-invited requests here without leaving Manage Orders.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => router.push("/(provider)/requests")}
+                    className="px-4 py-2 rounded-full bg-[#EEF2FF]"
+                  >
+                    <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#4F46E5]">View All</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {adminRequestedOrders.map((request) => (
+                  <View
+                    key={`admin-request-${request.id}`}
+                    className="bg-white rounded-[28px] p-5 mb-5 border border-[#E2E8F0] shadow-sm shadow-black/5"
+                  >
+                    <View className="flex-row justify-between items-start mb-4">
+                      <View className="flex-1 pr-3">
+                        <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#A0AEC0]">
+                          {request.requestNumber}
+                        </Text>
+                        <View className="self-start mt-2 px-3 py-1 rounded-full bg-[#EEF2FF]">
+                          <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#4F46E5]">
+                            Admin Request
+                          </Text>
+                        </View>
+                        <Text className="text-[20px] font-black text-[#1A2C42] mt-2">{request.categoryName}</Text>
+                        <Text className="text-[13px] text-[#7C8B95] mt-2">{request.serviceAddress}</Text>
+                      </View>
+                      <View className="px-3 py-2 rounded-full bg-[#EEF2FF]">
+                        <Text className="text-[11px] font-bold uppercase text-[#4F46E5]">Pending Review</Text>
+                      </View>
+                    </View>
+
+                    <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mb-4">
+                      <Text className="text-[14px] leading-[22px] text-[#5F7182]">{request.description}</Text>
+                    </View>
+
+                    <View className="flex-row">
+                      <View className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+                        <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Client</Text>
+                        <Text className="text-[15px] font-bold text-[#1A2C42] mt-2">{request.client.name}</Text>
+                      </View>
+                      <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+                        <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Budget</Text>
+                        <Text className="text-[18px] font-black text-[#1A2C42] mt-2">{formatCurrency(request.budget)}</Text>
+                      </View>
+                    </View>
+
+                    <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mt-4">
+                      <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred Time</Text>
+                      <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">
+                        {formatDateLabel(request.preferredDate)} • {request.preferredTime}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row mt-5">
+                      <TouchableOpacity
+                        onPress={() => void handleAdminRequestResponse(request.id, "decline", request.client.name)}
+                        disabled={respondingAdminInvitation && actingRequestId === request.id}
+                        className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] py-4 items-center"
+                      >
+                        {respondingAdminInvitation && actingRequestId === request.id ? (
+                          <ActivityIndicator color="#1A2C42" />
+                        ) : (
+                          <Text className="font-bold text-[#1A2C42]">Decline</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => void handleAdminRequestResponse(request.id, "accept", request.client.name)}
+                        disabled={respondingAdminInvitation && actingRequestId === request.id}
+                        className="flex-1 bg-[#2286BE] rounded-[18px] py-4 items-center"
+                      >
+                        {respondingAdminInvitation && actingRequestId === request.id ? (
+                          <ActivityIndicator color="white" />
+                        ) : (
+                          <Text className="font-bold text-white">Negotiate</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {orders.length ? (
               orders.map((order) => {
                 const isRevisionRequested =

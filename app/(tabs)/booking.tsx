@@ -324,87 +324,21 @@ export default function BookingPage() {
           <View className="px-6">
             {requests.length ? (
               requests.map((item) => (
-                <View
-                  key={item.id}
-                  className="mb-5 border border-[#E2E8F0] rounded-[26px] overflow-hidden bg-white shadow-sm shadow-black/5"
-                >
-                  <View className="px-5 py-5 border-b border-[#F1F5F9] flex-row justify-between items-start">
-                    <View className="flex-1 pr-3">
-                      <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#A0AEC0]">
-                        {item.requestNumber}
-                      </Text>
-                      <Text className="text-[20px] font-black text-[#1A2C42] mt-2">{item.categoryName}</Text>
-                      <Text className="text-[13px] font-medium text-[#7C8B95] mt-2" numberOfLines={2}>
-                        {item.serviceAddress}
-                      </Text>
-                    </View>
-                    <View className="px-3 py-2 rounded-full bg-[#EAF3FA]">
-                      <Text className="text-[11px] font-bold text-[#2286BE] uppercase">
-                        {item.acceptedAt ? "Accepted" : formatStatusLabel(item.status)}
-                      </Text>
-                    </View>
-                  </View>
+                <RequestedOrderCard key={item.id} item={item} onOpenPostRequest={() => router.push("/post-request")} onOpenRequestOrOrder={(request) => {
+                  const linkedOrderParam = resolveLinkedOrderParam(request.linkedOrderId, request.linkedOrderNumber);
+                  if (linkedOrderParam) {
+                    router.push({
+                      pathname: "/booking-details",
+                      params: {
+                        id: linkedOrderParam,
+                        role: "client",
+                      },
+                    });
+                    return;
+                  }
 
-                  <View className="p-5">
-                    <Text className="text-[14px] leading-[22px] text-[#5F7182]">{item.description}</Text>
-
-                    <View className="flex-row mt-5">
-                      <View className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
-                        <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Budget</Text>
-                        <Text className="text-[19px] font-black text-[#1A2C42] mt-2">{formatCurrency(item.budget)}</Text>
-                      </View>
-                      <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
-                        <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred Time</Text>
-                        <Text className="text-[15px] font-bold text-[#1A2C42] mt-2">
-                          {formatDateLabel(item.preferredDate)}, {item.preferredTime}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {item.acceptedProvider ? (
-                      <View className="flex-row items-center mt-5 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
-                        {item.acceptedProvider.avatar ? (
-                          <Image source={{ uri: item.acceptedProvider.avatar }} className="w-11 h-11 rounded-full mr-3" />
-                        ) : (
-                          <View className="w-11 h-11 rounded-full mr-3 bg-[#EAF3FA] items-center justify-center">
-                            <Ionicons name="person" size={20} color="#2286BE" />
-                          </View>
-                        )}
-                        <View className="flex-1">
-                          <Text className="text-[15px] font-bold text-[#1A2C42]">{item.acceptedProvider.name}</Text>
-                          <Text className="text-[13px] text-[#7C8B95] mt-1">Accepted provider</Text>
-                        </View>
-                      </View>
-                    ) : null}
-
-                    <View className="flex-row mt-5">
-                      <TouchableOpacity
-                        onPress={() => router.push("/post-request")}
-                        className="flex-1 mr-3 py-4 rounded-[18px] bg-[#F8FAFC] items-center"
-                      >
-                        <Text className="text-[#1A2C42] font-bold">New Request</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() =>
-                          resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber)
-                            ? router.push({
-                                pathname: "/booking-details",
-                                params: {
-                                  id: resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber),
-                                  role: "client",
-                                },
-                              })
-                            : router.push("/client-requests")
-                        }
-                        className="flex-1 py-4 rounded-[18px] bg-[#2286BE] items-center"
-                      >
-                        <Text className="text-white font-bold">
-                          {resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber) ? "Track Order" : "View Request"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
+                  router.push("/client-requests");
+                }} />
               ))
             ) : (
               <EmptyState
@@ -418,6 +352,45 @@ export default function BookingPage() {
           </View>
         ) : (
           <View className="px-6">
+            {requests.length ? (
+              <View className="mb-6">
+                <View className="flex-row items-center justify-between mb-4">
+                  <View>
+                    <Text className="text-[18px] font-black text-[#1A2C42]">Requested Orders</Text>
+                    <Text className="text-[13px] text-[#7C8B95] mt-1">
+                      Custom requests are visible here too for easier management.
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setActiveTab("requested")} className="px-4 py-2 rounded-full bg-[#EAF3FA]">
+                    <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2286BE]">View All</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {requests.map((item) => (
+                  <RequestedOrderCard
+                    key={`manage-${item.id}`}
+                    item={item}
+                    onOpenPostRequest={() => router.push("/post-request")}
+                    onOpenRequestOrOrder={(request) => {
+                      const linkedOrderParam = resolveLinkedOrderParam(request.linkedOrderId, request.linkedOrderNumber);
+                      if (linkedOrderParam) {
+                        router.push({
+                          pathname: "/booking-details",
+                          params: {
+                            id: linkedOrderParam,
+                            role: "client",
+                          },
+                        });
+                        return;
+                      }
+
+                      router.push("/client-requests");
+                    }}
+                  />
+                ))}
+              </View>
+            ) : null}
+
             {filteredOrders.length ? (
               filteredOrders.map((item) => (
                 <TouchableOpacity
@@ -583,6 +556,100 @@ function EmptyState({
       <TouchableOpacity onPress={onPress} className="bg-[#2286BE] px-8 py-4 rounded-[20px]">
         <Text className="text-white text-[16px] font-bold">{ctaLabel}</Text>
       </TouchableOpacity>
+    </View>
+  );
+}
+
+function RequestedOrderCard({
+  item,
+  onOpenPostRequest,
+  onOpenRequestOrOrder,
+}: {
+  item: ServiceRequestSummary;
+  onOpenPostRequest: () => void;
+  onOpenRequestOrOrder: (item: ServiceRequestSummary) => void;
+}) {
+  return (
+    <View className="mb-5 border border-[#E2E8F0] rounded-[26px] overflow-hidden bg-white shadow-sm shadow-black/5">
+      <View className="px-5 py-5 border-b border-[#F1F5F9] flex-row justify-between items-start">
+        <View className="flex-1 pr-3">
+          <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#A0AEC0]">
+            {item.requestNumber}
+          </Text>
+          <View className="self-start mt-2 px-3 py-1 rounded-full bg-[#FEF3C7]">
+            <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B45309]">
+              Requested Order
+            </Text>
+          </View>
+          <Text className="text-[20px] font-black text-[#1A2C42] mt-2">{item.categoryName}</Text>
+          <Text className="text-[13px] font-medium text-[#7C8B95] mt-2" numberOfLines={2}>
+            {item.serviceAddress}
+          </Text>
+        </View>
+        <View className="px-3 py-2 rounded-full bg-[#EAF3FA]">
+          <Text className="text-[11px] font-bold text-[#2286BE] uppercase">
+            {item.acceptedAt ? "Accepted" : formatStatusLabel(item.status)}
+          </Text>
+        </View>
+      </View>
+
+      <View className="p-5">
+        <Text className="text-[14px] leading-[22px] text-[#5F7182]">{item.description}</Text>
+
+        {item.requestSource === "custom_category" && item.pendingAdminCategoryApproval ? (
+          <View className="mt-4 rounded-[18px] border border-dashed border-[#C7D2FE] bg-[#EEF2FF] px-4 py-3">
+            <Text className="text-[12px] font-semibold leading-[18px] text-[#4338CA]">
+              Your new category request for {item.customCategoryName || item.categoryName} is waiting for admin approval.
+            </Text>
+          </View>
+        ) : null}
+
+        <View className="flex-row mt-5">
+          <View className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+            <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Budget</Text>
+            <Text className="text-[19px] font-black text-[#1A2C42] mt-2">{formatCurrency(item.budget)}</Text>
+          </View>
+          <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+            <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred Time</Text>
+            <Text className="text-[15px] font-bold text-[#1A2C42] mt-2">
+              {formatDateLabel(item.preferredDate)}, {item.preferredTime}
+            </Text>
+          </View>
+        </View>
+
+        {item.acceptedProvider ? (
+          <View className="flex-row items-center mt-5 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
+            {item.acceptedProvider.avatar ? (
+              <Image source={{ uri: item.acceptedProvider.avatar }} className="w-11 h-11 rounded-full mr-3" />
+            ) : (
+              <View className="w-11 h-11 rounded-full mr-3 bg-[#EAF3FA] items-center justify-center">
+                <Ionicons name="person" size={20} color="#2286BE" />
+              </View>
+            )}
+            <View className="flex-1">
+              <Text className="text-[15px] font-bold text-[#1A2C42]">{item.acceptedProvider.name}</Text>
+              <Text className="text-[13px] text-[#7C8B95] mt-1">Accepted provider</Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View className="flex-row mt-5">
+          <TouchableOpacity
+            onPress={onOpenPostRequest}
+            className="flex-1 mr-3 py-4 rounded-[18px] bg-[#F8FAFC] items-center"
+          >
+            <Text className="text-[#1A2C42] font-bold">New Request</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onOpenRequestOrOrder(item)}
+            className="flex-1 py-4 rounded-[18px] bg-[#2286BE] items-center"
+          >
+            <Text className="text-white font-bold">
+              {resolveLinkedOrderParam(item.linkedOrderId, item.linkedOrderNumber) ? "Track Order" : "View Request"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 }

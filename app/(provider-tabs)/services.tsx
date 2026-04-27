@@ -3,8 +3,10 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  ActionSheetIOS,
   Alert,
   Image,
+  Modal,
   Platform,
   ScrollView,
   Share,
@@ -19,6 +21,7 @@ import {
   useDeleteGigMutation,
   useDeleteGigRequestMutation,
   useGetMyGigsQuery,
+  useLazyGetGigAnalyticsQuery,
 } from "@/src/store/services/apiSlice";
 
 const kmToMiles = (km?: number | null) => ((Number(km || 0) * 0.621371) || 0).toFixed(1);
@@ -29,7 +32,10 @@ export default function ProviderServices() {
   const tabBarHeight =
     Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [activeTab, setActiveTab] = useState<"published" | "pending" | "other">("published");
+  const [analyticsGig, setAnalyticsGig] = useState<{ id: string; title: string } | null>(null);
+  const [menuGig, setMenuGig] = useState<any | null>(null);
   const { data, isLoading, refetch } = useGetMyGigsQuery();
+  const [getGigAnalytics, { data: analyticsData, isFetching: analyticsLoading }] = useLazyGetGigAnalyticsQuery();
   const [deleteGig, { isLoading: deletingGig }] = useDeleteGigMutation();
   const [deleteGigRequest, { isLoading: deletingGigRequest }] = useDeleteGigRequestMutation();
 
@@ -97,6 +103,48 @@ export default function ProviderServices() {
       ]
     );
   };
+
+  const handleOpenAnalytics = async (gig: any) => {
+    const gigId = String(gig._id || gig.id || "");
+    if (!gigId || gig.status !== "published") {
+      Alert.alert("Analytics unavailable", "This gig must be published before analytics can be viewed.");
+      return;
+    }
+
+    setAnalyticsGig({ id: gigId, title: gig.title || "Gig" });
+    void getGigAnalytics(gigId);
+  };
+
+  const openGigMenu = (gig: any) => {
+    if (Platform.OS === "ios") {
+      const options = ["View Analytics", "Cancel"];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            void handleOpenAnalytics(gig);
+          }
+        }
+      );
+      return;
+    }
+
+    setMenuGig(gig);
+  };
+
+  const activeAnalyticsData =
+    analyticsData?.data?.gig?.id && analyticsData.data.gig.id === analyticsGig?.id ? analyticsData.data : null;
+  const analyticsSummary = activeAnalyticsData?.summary;
+  const analyticsSeries = Array.isArray(activeAnalyticsData?.detailViewSeries)
+    ? activeAnalyticsData.detailViewSeries.map((item) => ({
+        label: item.label || "",
+        count: Number(item.count || 0),
+      }))
+    : [];
+  const maxAnalyticsCount = Math.max(1, ...analyticsSeries.map((item) => item.count));
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
@@ -184,8 +232,16 @@ export default function ProviderServices() {
                           </Text>
                           <Text className="text-[13px] text-[#2286BE] font-bold mt-2">{gig.categoryName || "General"}</Text>
                         </View>
-                        <View className="px-3 py-2 rounded-full bg-[#EAF3FA]">
-                          <Text className="text-[11px] font-bold uppercase text-[#2286BE]">{statusLabel}</Text>
+                        <View className="items-end">
+                          <TouchableOpacity
+                            onPress={() => openGigMenu(gig)}
+                            className="w-10 h-10 rounded-full bg-[#F8FAFC] border border-gray-200 items-center justify-center mb-2"
+                          >
+                            <Ionicons name="ellipsis-horizontal" size={18} color="#1A2C42" />
+                          </TouchableOpacity>
+                          <View className="px-3 py-2 rounded-full bg-[#EAF3FA]">
+                            <Text className="text-[11px] font-bold uppercase text-[#2286BE]">{statusLabel}</Text>
+                          </View>
                         </View>
                       </View>
 
@@ -226,9 +282,6 @@ export default function ProviderServices() {
                     <TouchableOpacity onPress={() => void handleShareGig(gig)} className="flex-1 mr-3 py-3 rounded-[16px] bg-white border border-gray-200 items-center">
                       <Text className="font-bold text-[#1A2C42]">Share</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => router.push("/provider-help")} className="flex-1 mr-3 py-3 rounded-[16px] bg-white border border-gray-200 items-center">
-                      <Text className="font-bold text-[#1A2C42]">{statusLabel === "Under Review" ? "Review Tips" : "Help"}</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => void handleDeleteGig(gig)}
                       disabled={deleting}
@@ -259,6 +312,121 @@ export default function ProviderServices() {
           )}
         </ScrollView>
       )}
+
+      <Modal visible={Boolean(analyticsGig)} transparent animationType="fade" onRequestClose={() => setAnalyticsGig(null)}>
+        <View className="flex-1 bg-black/45 items-center justify-center px-5">
+          <View className="w-full max-w-[420px] rounded-[28px] bg-white overflow-hidden">
+            <View className="px-6 py-5 border-b border-gray-100">
+              <Text className="text-[22px] font-black text-[#1A2C42]">Gig Analytics</Text>
+              <Text className="text-[13px] text-[#7C8B95] mt-2">
+                {analyticsGig?.title || "Selected gig"} performance from logged-in client activity.
+              </Text>
+            </View>
+
+            <ScrollView className="max-h-[70vh]" contentContainerStyle={{ padding: 24 }}>
+              <View className="flex-row mb-4">
+                <View className="flex-1 mr-3 rounded-[22px] bg-[#F8FAFC] px-4 py-5">
+                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Visible On Services</Text>
+                  <Text className="text-[30px] font-black text-[#1A2C42] mt-3">
+                    {analyticsLoading ? "..." : Number(analyticsSummary?.servicesPageVisibleClients || 0)}
+                  </Text>
+                  <Text className="text-[12px] leading-[18px] text-[#7C8B95] mt-2">
+                    Unique logged-in clients who saw this gig on services.
+                  </Text>
+                </View>
+
+                <View className="flex-1 rounded-[22px] bg-[#F8FAFC] px-4 py-5">
+                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Detail Visits</Text>
+                  <Text className="text-[30px] font-black text-[#1A2C42] mt-3">
+                    {analyticsLoading ? "..." : Number(analyticsSummary?.detailPageUniqueClients || 0)}
+                  </Text>
+                  <Text className="text-[12px] leading-[18px] text-[#7C8B95] mt-2">
+                    Unique logged-in clients who opened the detail page.
+                  </Text>
+                </View>
+              </View>
+
+              <View className="rounded-[22px] bg-[#F8FAFC] px-4 py-5">
+                <Text className="text-[18px] font-black text-[#1A2C42]">Detail Page Visits Trend</Text>
+                <Text className="text-[13px] text-[#7C8B95] mt-1">Daily unique client visits over the last 14 days.</Text>
+
+                {analyticsLoading ? (
+                  <View className="h-[220px] items-center justify-center">
+                    <ActivityIndicator color="#2286BE" size="large" />
+                  </View>
+                ) : analyticsSeries.length ? (
+                  <View className="mt-6">
+                    <View className="flex-row items-end justify-between h-[180px]">
+                      {analyticsSeries.map((item) => (
+                        <View key={item.label} className="flex-1 items-center justify-end mx-[2px]">
+                          <Text className="text-[10px] font-bold text-[#2286BE] mb-2">{item.count}</Text>
+                          <View
+                            className="w-full rounded-t-[10px] bg-[#2286BE]"
+                            style={{ height: Math.max(8, (item.count / maxAnalyticsCount) * 120) }}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                    <View className="flex-row justify-between mt-3">
+                      {analyticsSeries.map((item) => (
+                        <Text key={`${item.label}-axis`} className="flex-1 text-center text-[10px] font-bold text-[#94A3B8]">
+                          {item.label}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <View className="h-[220px] items-center justify-center">
+                    <Text className="text-[14px] font-bold text-[#7C8B95]">No detail-page visits recorded yet.</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <View className="px-6 py-4 border-t border-gray-100">
+              <TouchableOpacity
+                onPress={() => setAnalyticsGig(null)}
+                className="h-[52px] rounded-[18px] bg-[#2286BE] items-center justify-center"
+              >
+                <Text className="text-white text-[15px] font-bold">Close</Text>
+                
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(menuGig)} transparent animationType="fade" onRequestClose={() => setMenuGig(null)}>
+        <View className="flex-1 bg-black/35 justify-end">
+          <TouchableOpacity className="flex-1" activeOpacity={1} onPress={() => setMenuGig(null)} />
+          <View className="bg-white rounded-t-[28px] px-6 pt-5 pb-5">
+            <View className="w-12 h-1.5 rounded-full bg-gray-200 self-center mb-5" />
+            <Text className="text-[18px] font-black text-[#1A2C42] mb-1">Gig Actions</Text>
+            <Text className="text-[13px] text-[#7C8B95] mb-5">{menuGig?.title || "Selected gig"}</Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                const selectedGig = menuGig;
+                setMenuGig(null);
+                if (selectedGig) {
+                  void handleOpenAnalytics(selectedGig);
+                }
+              }}
+              className="h-[56px] rounded-[18px] bg-[#F8FAFC] border border-gray-200 px-4 flex-row items-center"
+            >
+              <Ionicons name="analytics-outline" size={20} color="#2286BE" />
+              <Text className="ml-3 text-[15px] font-bold text-[#1A2C42]">View Analytics</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setMenuGig(null)}
+              className="h-[56px] rounded-[18px] bg-[#2286BE] mt-2 mb-8 items-center justify-center"
+            >
+              <Text className="text-white text-[15px] font-bold">Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

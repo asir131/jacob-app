@@ -49,6 +49,43 @@ export type LoginResponse = ApiEnvelope<{
   user: AppUser;
 }>;
 
+export type WebsiteReviewContext = "client" | "provider";
+
+export type WebsiteReviewPromptResponse = {
+  context: WebsiteReviewContext;
+  currentOrderCount: number;
+  submittedAt?: string | null;
+  deferredOrderCount?: number;
+  shouldPrompt: boolean;
+};
+
+export type PublicWebsiteReviewsResponse = {
+  providerReviews?: {
+    id: string;
+    reviewText?: string;
+    websiteRating?: number;
+    reviewer?: {
+      id?: string;
+      name?: string;
+      avatar?: string;
+      sellerLevel?: string;
+      providerRating?: number;
+      monthlyIncome?: number;
+    };
+  }[];
+  clientReviews?: {
+    id: string;
+    reviewText?: string;
+    websiteRating?: number;
+    reviewer?: {
+      id?: string;
+      name?: string;
+      avatar?: string;
+      monthlySpending?: number;
+    };
+  }[];
+};
+
 export type CategoryItem = {
   id: string;
   name: string;
@@ -178,6 +215,23 @@ export type PublicProviderProfile = {
     orderCompletion?: number;
   };
   skills?: string[];
+};
+
+export type GigAnalyticsResponse = {
+  gig?: {
+    id?: string;
+    title?: string;
+    status?: string;
+  };
+  summary?: {
+    servicesPageVisibleClients?: number;
+    detailPageUniqueClients?: number;
+  };
+  detailViewSeries?: {
+    date?: string;
+    label?: string;
+    count?: number;
+  }[];
 };
 
 export type OrderSummary = {

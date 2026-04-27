@@ -39,7 +39,7 @@ export default function LoginScreen() {
 
         setLoading(true);
         try {
-            const user = await loginWithPassword(email.trim(), password);
+            const user = await loginWithPassword(email.trim(), password, rememberMe);
             router.replace(user.role === "provider" ? "/(provider-tabs)" : "/(tabs)");
         } catch (error) {
             const message = error instanceof ApiError ? error.message : "Login failed. Please try again.";

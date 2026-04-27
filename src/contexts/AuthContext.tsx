@@ -19,9 +19,12 @@ type AuthContextValue = {
   loading: boolean;
   isAuthenticated: boolean;
   role: AppUser["role"] | "client";
-  loginWithPassword: (email: string, password: string) => Promise<AppUser>;
+  loginWithPassword: (email: string, password: string, rememberMe?: boolean) => Promise<AppUser>;
   bootstrapProfile: () => Promise<void>;
-  setSession: (next: { accessToken: string; refreshToken: string; user: AppUser }) => Promise<void>;
+  setSession: (
+    next: { accessToken: string; refreshToken: string; user: AppUser },
+    options?: { persistent?: boolean }
+  ) => Promise<void>;
   setRole: (role: "client" | "provider" | "superAdmin") => Promise<void>;
   updateProfile: (payload: Partial<AppUser>) => Promise<void>;
   logout: () => Promise<void>;
@@ -65,11 +68,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void restore();
   }, [dispatch]);
 
-  const setSession = useCallback(async (next: { accessToken: string; refreshToken: string; user: AppUser }) => {
+  const setSession = useCallback(async (
+    next: { accessToken: string; refreshToken: string; user: AppUser },
+    options?: { persistent?: boolean }
+  ) => {
     dispatch(loginSuccess(next.user));
     setAccessToken(next.accessToken);
     setRefreshToken(next.refreshToken);
-    await authStorage.setSession(next.accessToken, next.refreshToken, next.user);
+    await authStorage.setSession(
+      next.accessToken,
+      next.refreshToken,
+      next.user,
+      options?.persistent ?? authStorage.isPersistent()
+    );
   }, [dispatch]);
 
   const bootstrapProfile = useCallback(async () => {
@@ -84,12 +95,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       accessToken: storedAccess,
       refreshToken: storedRefresh,
       user: profile.data.user,
-    });
+    }, { persistent: true });
   }, [setSession]);
 
-  const loginWithPassword = useCallback(async (email: string, password: string) => {
+  const loginWithPassword = useCallback(async (email: string, password: string, rememberMe = true) => {
     const payload = await store.dispatch(apiSlice.endpoints.login.initiate({ email, password })).unwrap();
-    await setSession(payload.data);
+    await setSession(payload.data, { persistent: rememberMe });
     return payload.data.user;
   }, [setSession]);
 
@@ -98,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user || !accessToken || !refreshToken) return;
 
     const nextUser = { ...user, role: nextRole };
-    await authStorage.setSession(accessToken, refreshToken, nextUser);
+    await authStorage.setSession(accessToken, refreshToken, nextUser, authStorage.isPersistent());
 
     try {
       await store.dispatch(apiSlice.endpoints.updateProfile.initiate({ role: nextRole })).unwrap();
@@ -120,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     dispatch(updateAuthProfile(payload));
-    await authStorage.setSession(accessToken, refreshToken, nextUser);
+    await authStorage.setSession(accessToken, refreshToken, nextUser, authStorage.isPersistent());
   }, [accessToken, dispatch, refreshToken, user]);
 
   const logout = useCallback(async () => {

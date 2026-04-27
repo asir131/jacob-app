@@ -11,10 +11,13 @@ import type {
   ConversationSummary,
   DashboardData,
   FaqItem,
+  GigAnalyticsResponse,
+  PublicWebsiteReviewsResponse,
   PublicServiceCard,
   PublicServiceDetail,
   PublicProviderProfile,
   ServiceRequestSummary,
+  WebsiteReviewPromptResponse,
   WithdrawalBalance,
   WithdrawalSummary,
 } from "@/src/types/api";
@@ -68,7 +71,8 @@ const baseQuery: typeof rawBaseQuery = async (args, api, extraOptions) => {
         await authStorage.setSession(
           refreshPayload.data.accessToken,
           refreshPayload.data.refreshToken || refreshToken,
-          currentUser
+          currentUser,
+          authStorage.isPersistent()
         );
         return rawBaseQuery(args, api, extraOptions);
       }
@@ -590,6 +594,9 @@ export const apiSlice = createApi({
       query: () => "/api/gigs/mine",
       providesTags: ["Gigs"],
     }),
+    getGigAnalytics: builder.query<ApiEnvelope<GigAnalyticsResponse>, string>({
+      query: (id) => `/api/gigs/${id}/analytics`,
+    }),
     createGig: builder.mutation<ApiEnvelope<unknown>, FormData>({
       query: (formData) => ({
         url: "/api/gigs",
@@ -657,6 +664,65 @@ export const apiSlice = createApi({
         body: payload,
       }),
     }),
+    getWebsiteReviewPrompt: builder.query<
+      ApiEnvelope<WebsiteReviewPromptResponse>,
+      "client" | "provider"
+    >({
+      query: (context) => `/api/website-reviews/prompt?context=${context}`,
+    }),
+    submitWebsiteReview: builder.mutation<
+      ApiEnvelope<unknown>,
+      { context: "client" | "provider"; rating: number; reviewText?: string }
+    >({
+      query: (payload) => ({
+        url: "/api/website-reviews",
+        method: "POST",
+        body: payload,
+      }),
+    }),
+    remindWebsiteReviewLater: builder.mutation<
+      ApiEnvelope<{ context: "client" | "provider"; deferredUntilOrderCount?: number }>,
+      { context: "client" | "provider" }
+    >({
+      query: (payload) => ({
+        url: "/api/website-reviews/remind-later",
+        method: "POST",
+        body: payload,
+      }),
+    }),
+    getPublicWebsiteReviews: builder.query<ApiEnvelope<PublicWebsiteReviewsResponse>, void>({
+      query: () => "/api/website-reviews/public",
+    }),
+    requestForgotPasswordOtp: builder.mutation<
+      ApiEnvelope<{ email: string; otpExpiresInMinutes: number }>,
+      { email: string }
+    >({
+      query: (payload) => ({
+        url: "/api/auth/forgot-password/request-otp",
+        method: "POST",
+        body: payload,
+      }),
+    }),
+    verifyForgotPasswordOtp: builder.mutation<
+      ApiEnvelope<{ email: string; resetToken: string }>,
+      { email: string; otp: string }
+    >({
+      query: (payload) => ({
+        url: "/api/auth/forgot-password/verify-otp",
+        method: "POST",
+        body: payload,
+      }),
+    }),
+    resetForgotPassword: builder.mutation<
+      ApiEnvelope<unknown>,
+      { email: string; otp: string; resetToken: string; newPassword: string; confirmPassword: string }
+    >({
+      query: (payload) => ({
+        url: "/api/auth/forgot-password/reset",
+        method: "POST",
+        body: payload,
+      }),
+    }),
   }),
 });
 
@@ -714,6 +780,7 @@ export const {
   useRequestWithdrawalMutation,
   useCreateSupportMessageMutation,
   useGetMyGigsQuery,
+  useLazyGetGigAnalyticsQuery,
   useCreateGigMutation,
   useUpdateGigMutation,
   useDeleteGigMutation,
@@ -722,4 +789,11 @@ export const {
   useLogoutMutation,
   useSignupMutation,
   useVerifySignupOtpMutation,
+  useLazyGetWebsiteReviewPromptQuery,
+  useSubmitWebsiteReviewMutation,
+  useRemindWebsiteReviewLaterMutation,
+  useGetPublicWebsiteReviewsQuery,
+  useRequestForgotPasswordOtpMutation,
+  useVerifyForgotPasswordOtpMutation,
+  useResetForgotPasswordMutation,
 } = apiSlice;

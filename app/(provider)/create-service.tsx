@@ -393,7 +393,7 @@ export default function CreateServicePage() {
                 {loadingCategories ? (
                   <ActivityIndicator color="#2286BE" />
                 ) : (
-                  <>
+                  <View className="flex-row">
                     {categories.map((category) => (
                       <TouchableOpacity
                         key={category.id}
@@ -409,12 +409,12 @@ export default function CreateServicePage() {
                     >
                       <Text className={`font-bold ${isCustomCategory ? "text-white" : "text-[#1A2C42]"}`}>Custom</Text>
                     </TouchableOpacity>
-                  </>
+                  </View>
                 )}
               </ScrollView>
 
               {isCustomCategory ? (
-                <>
+                <View>
                   <InputField
                     label="Custom Category Name"
                     value={formData.customCategoryName}
@@ -431,7 +431,7 @@ export default function CreateServicePage() {
                     placeholder="Explain your custom category..."
                     textAlignVertical="top"
                   />
-                </>
+                </View>
               ) : null}
 
               <Text className="text-[14px] font-bold text-[#1A2C42] mb-2 ml-1">Expert Type</Text>

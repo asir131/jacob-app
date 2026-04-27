@@ -1,6 +1,7 @@
 import { FontAwesome5, Foundation, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthProvider } from '@/src/contexts/AuthContext';
 import { SocketProvider } from '@/src/contexts/SocketContext';
+import WebsiteReviewPrompt from '@/src/components/feedback/WebsiteReviewPrompt';
 import { store } from '@/src/store';
 import { useFonts } from 'expo-font';
 import { Stack } from "expo-router";
@@ -34,6 +35,7 @@ export default function RootLayout() {
     <Provider store={store}>
       <AuthProvider>
         <SocketProvider>
+          <WebsiteReviewPrompt />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)/index" />
             <Stack.Screen name="(auth)/onboarding" />

@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { useSocketNotifications } from "@/src/contexts/SocketContext";
-import { useState } from "react";
-import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useRouter } from "expo-router";
@@ -10,11 +8,8 @@ import { useRouter } from "expo-router";
 export default function SettingsPage() {
     const router = useRouter();
     const { setRole, user, logout } = useAuth();
-    const { unreadCount, socketConnected } = useSocketNotifications();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
-    const [pushEnabled, setPushEnabled] = useState(true);
-    const [emailEnabled, setEmailEnabled] = useState(false);
 
     const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null, onPress = null }: any) => (
         <TouchableOpacity
@@ -44,15 +39,6 @@ export default function SettingsPage() {
                 </View>
             )}
 
-            {type === 'switch' && (
-                <Switch
-                    value={value}
-                    onValueChange={onChange}
-                    trackColor={{ false: '#E2E8F0', true: '#2B84B1' }}
-                    thumbColor={'#FFFFFF'}
-                    ios_backgroundColor="#E2E8F0"
-                />
-            )}
         </TouchableOpacity>
     );
 
@@ -135,36 +121,6 @@ export default function SettingsPage() {
                         <SettingsRow icon="document-text-outline" label="My Requests" color="#2B84B1" route="/client-requests" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="location-outline" label="Saved Addresses" value={user?.address ? "1 place" : "Not set"} color="#2B84B1" route="/(profile)/saved-addresses" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="card-outline" label="Payment Methods" value="Visa ending 4242" color="#2B84B1" route="/(profile)/payment-methods" />
-                    </View>
-                </View>
-
-                {/* Notifications & Prefs */}
-                <View className="px-6 mb-8">
-                    <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-2">
-                        Preferences
-                    </Text>
-                    <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow
-                            icon="notifications-outline"
-                            label="Push Notifications"
-                            type="switch"
-                            color="#F5A623"
-                            value={pushEnabled}
-                            onChange={setPushEnabled}
-                        />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow
-                            icon="mail-outline"
-                            label="Email Updates"
-                            type="switch"
-                            color="#F5A623"
-                            value={emailEnabled}
-                            onChange={setEmailEnabled}
-                        />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="notifications-circle-outline" label="Live Notifications" value={unreadCount ? `${unreadCount} new` : socketConnected ? "Connected" : "Offline"} color="#F5A623" route="/notifications" />
                     </View>
                 </View>
 
@@ -174,8 +130,6 @@ export default function SettingsPage() {
                         Support & Info
                     </Text>
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow icon="help-buoy-outline" label="Help Center" color="#10B981" route="/(provider)/support" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="mail-outline" label="Contact Us" color="#10B981" route="/contact" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="information-circle-outline" label="About Jacob" color="#10B981" route="/about" />
