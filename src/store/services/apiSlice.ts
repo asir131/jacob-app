@@ -637,6 +637,16 @@ export const apiSlice = createApi({
         body: payload,
       }),
     }),
+    loginWithGoogle: builder.mutation<
+      ApiEnvelope<{ accessToken: string; refreshToken: string; user: AppUser }>,
+      { idToken: string; role?: "client" | "provider" }
+    >({
+      query: (payload) => ({
+        url: "/api/auth/google",
+        method: "POST",
+        body: payload,
+      }),
+    }),
     logout: builder.mutation<ApiEnvelope<unknown>, { refreshToken: string }>({
       query: (payload) => ({
         url: "/api/auth/logout",
@@ -786,6 +796,7 @@ export const {
   useDeleteGigMutation,
   useDeleteGigRequestMutation,
   useLoginMutation,
+  useLoginWithGoogleMutation,
   useLogoutMutation,
   useSignupMutation,
   useVerifySignupOtpMutation,

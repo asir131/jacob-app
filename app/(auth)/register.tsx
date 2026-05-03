@@ -79,6 +79,11 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (!/[^\w\s]/.test(password)) {
+      Alert.alert("Weak password", "Password must include at least 1 special character.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert("Password mismatch", "Password and confirm password must match.");
       return;
