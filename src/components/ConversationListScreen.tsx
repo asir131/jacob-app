@@ -201,6 +201,7 @@ export function ConversationListScreen() {
                     info: item.orderName || item.categoryName || "",
                     blockedBy: item.blockedBy || "",
                     targetUserId: item.otherUser.id,
+                    targetUserRole: item.otherUser.role || "",
                   },
                 })
               }

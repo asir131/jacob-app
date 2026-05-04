@@ -60,6 +60,7 @@ type CallInvitePayload = {
   conversationId: string;
   targetUserId?: string;
   senderId?: string;
+  senderRole?: string;
   senderName?: string;
   senderAvatar?: string;
   callType: CallType;
@@ -93,6 +94,37 @@ const formatCallDuration = (totalSeconds: number) => {
   return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 };
 
+const ProfileAvatar = ({
+  uri,
+  size,
+  className = "",
+  iconSize,
+}: {
+  uri?: string;
+  size: number;
+  className?: string;
+  iconSize: number;
+}) => {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        className={className}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
+
+  return (
+    <View
+      className={`items-center justify-center bg-[#EAF3FA] ${className}`}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+    >
+      <Ionicons name="person-outline" size={iconSize} color="#2286BE" />
+    </View>
+  );
+};
+
 export default function ChatDetailsPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -108,6 +140,7 @@ export default function ChatDetailsPage() {
     info?: string;
     blockedBy?: string;
     targetUserId?: string;
+    targetUserRole?: string;
   }>();
 
   const readParam = (value?: string | string[]) => {
@@ -158,6 +191,7 @@ export default function ChatDetailsPage() {
   const info = readParam(params.info);
   const blockedByParam = readParam(params.blockedBy);
   const targetUserIdParam = readParam(params.targetUserId);
+  const targetUserRoleParam = readParam(params.targetUserRole);
   const conversationId = resolvedConversationId || conversationIdParam;
   const conversations = useMemo(() => conversationsPayload?.data || [], [conversationsPayload]);
   const selectedConversation = useMemo(
@@ -179,6 +213,10 @@ export default function ChatDetailsPage() {
   const initialMessages = useMemo(() => data?.data.items || [], [data]);
   const displayAvatar = typeof avatar === "string" ? avatar : "";
   const targetUserId = typeof targetUserIdParam === "string" ? targetUserIdParam : "";
+  const targetUserRole =
+    selectedConversation?.otherUser?.role || (typeof targetUserRoleParam === "string" ? targetUserRoleParam : "");
+  const isAdminConversation = targetUserRole === "superAdmin" || user?.role === "superAdmin";
+  const canStartCalls = !isAdminConversation;
   const isBlockedByMe = Boolean(blockedBy && blockedBy === user?.id);
   const isBlockedByOther = Boolean(blockedBy && blockedBy !== user?.id);
   const canSend = !blockedBy;
@@ -363,6 +401,11 @@ export default function ChatDetailsPage() {
         return;
       }
 
+      if (!canStartCalls) {
+        Alert.alert("Call unavailable", "Audio and video calls are not available with admin support.");
+        return;
+      }
+
       try {
         resetCallState();
         setActiveCall(callType);
@@ -406,7 +449,7 @@ export default function ChatDetailsPage() {
         Alert.alert("Call failed", message);
       }
     },
-    [attachPeerListeners, conversationId, createLocalStream, resetCallState, socket, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
+    [attachPeerListeners, canStartCalls, conversationId, createLocalStream, resetCallState, socket, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
   );
 
   const acceptIncomingCall = useCallback(async () => {
@@ -504,6 +547,10 @@ export default function ChatDetailsPage() {
         (payload.senderId && payload.senderId === targetUserId);
 
       if (!isRelevantConversation) return;
+      if (payload.senderRole === "superAdmin" || !canStartCalls) {
+        resetCallState();
+        return;
+      }
       resetCallState();
       setIncomingCall(payload);
       setActiveCall(payload.callType);
@@ -563,16 +610,30 @@ export default function ChatDetailsPage() {
       resetCallState();
     };
 
+    const handleBlocked = (payload: { conversationId?: string; reason?: string }) => {
+      if (
+        payload.conversationId &&
+        payload.conversationId !== conversationId &&
+        payload.conversationId !== activeCallRef.current?.conversationId
+      ) {
+        return;
+      }
+      resetCallState();
+      Alert.alert("Call unavailable", payload.reason || "Audio and video calls are not available with admin support.");
+    };
+
     socket.on("call:invite", handleInvite);
     socket.on("call:signal", handleSignal);
     socket.on("call:end", handleEnd);
+    socket.on("call:blocked", handleBlocked);
 
     return () => {
       socket.off("call:invite", handleInvite);
       socket.off("call:signal", handleSignal);
       socket.off("call:end", handleEnd);
+      socket.off("call:blocked", handleBlocked);
     };
-  }, [conversationId, displayAvatar, incomingCall?.conversationId, name, resetCallState, socket, targetUserId]);
+  }, [canStartCalls, conversationId, displayAvatar, incomingCall?.conversationId, name, resetCallState, socket, targetUserId]);
 
   const handlePickAttachments = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -745,10 +806,7 @@ export default function ChatDetailsPage() {
 
         <View className="flex-row items-center justify-between pb-2">
           <View className="flex-row items-center flex-1 pr-4">
-            <Image
-              source={{ uri: displayAvatar || "https://i.pravatar.cc/150?u=guest" }}
-              className="w-[52px] h-[52px] rounded-full mr-4"
-            />
+            <ProfileAvatar uri={displayAvatar} size={52} iconSize={24} className="mr-4" />
             <View className="flex-1">
               <Text className="text-[20px] font-bold text-[#2286BE]" numberOfLines={1}>
                 {name}
@@ -760,18 +818,22 @@ export default function ChatDetailsPage() {
           </View>
 
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={() => void startOutgoingCall("voice")}
-              className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
-            >
-              <Ionicons name="call" size={20} color="#2286BE" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => void startOutgoingCall("video")}
-              className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
-            >
-              <Ionicons name="videocam" size={21} color="#2286BE" />
-            </TouchableOpacity>
+            {canStartCalls ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => void startOutgoingCall("voice")}
+                  className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
+                >
+                  <Ionicons name="call" size={20} color="#2286BE" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void startOutgoingCall("video")}
+                  className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
+                >
+                  <Ionicons name="videocam" size={21} color="#2286BE" />
+                </TouchableOpacity>
+              </>
+            ) : null}
             <TouchableOpacity
               onPress={() => setMenuOpen(true)}
               className="w-11 h-11 rounded-full bg-[#F8FAFC] items-center justify-center"
@@ -828,10 +890,7 @@ export default function ChatDetailsPage() {
                   className={`flex-row mb-8 ${isMe ? "justify-end" : "justify-start"}`}
                 >
                   {!isMe && (
-                    <Image
-                      source={{ uri: displayAvatar || "https://i.pravatar.cc/150?u=guest" }}
-                      className="w-8 h-8 rounded-full mr-3 mt-1"
-                    />
+                    <ProfileAvatar uri={displayAvatar} size={32} iconSize={16} className="mr-3 mt-1" />
                   )}
                   <View className="max-w-[75%]">
                     <View
@@ -1155,14 +1214,11 @@ export default function ChatDetailsPage() {
                   <RTCView streamURL={remoteStreamUrl} className="w-full h-[280px]" objectFit="cover" />
                 ) : (
                   <View className="h-[280px] items-center justify-center px-8 bg-[#08131B]">
-                    <Image
-                      source={{
-                        uri:
-                          incomingCall?.senderAvatar ||
-                          displayAvatar ||
-                          "https://i.pravatar.cc/180?u=call-user",
-                      }}
-                      className="w-[96px] h-[96px] rounded-full mb-5"
+                    <ProfileAvatar
+                      uri={incomingCall?.senderAvatar || displayAvatar}
+                      size={96}
+                      iconSize={40}
+                      className="mb-5"
                     />
                     <Text className="text-white text-[22px] font-bold text-center">{callTitle}</Text>
                     <Text className="text-white/65 text-[14px] mt-2 text-center">
