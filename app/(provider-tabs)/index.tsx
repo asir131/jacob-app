@@ -54,24 +54,28 @@ export default function SellerDashboard() {
       value: String(dashboard?.orders?.activeOrders || 0),
       icon: "briefcase-outline",
       color: "#2B84B1",
+      route: { pathname: "/(provider-tabs)/orders", params: { status: "active" } },
     },
     {
       label: "Pending Orders",
       value: String(dashboard?.orders?.pendingOrders || 0),
       icon: "time-outline",
       color: "#F59E0B",
+      route: { pathname: "/(provider-tabs)/orders", params: { status: "pending" } },
     },
     {
       label: "Completed",
       value: String(dashboard?.orders?.completedOrders || 0),
       icon: "checkmark-circle-outline",
       color: "#10B981",
+      route: { pathname: "/(provider-tabs)/orders", params: { status: "completed" } },
     },
     {
       label: "Rating",
       value: Number(dashboard?.ratings?.averageRating || 0).toFixed(1),
       icon: "star-outline",
       color: "#8B5CF6",
+      route: { pathname: "/(provider)/reviews" },
     },
   ];
 
@@ -167,13 +171,18 @@ export default function SellerDashboard() {
 
         <View className="flex-row flex-wrap justify-between mb-8">
           {statCards.map((item) => (
-            <View key={item.label} className="w-[48%] bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm shadow-black/5 mb-4">
+            <TouchableOpacity
+              key={item.label}
+              activeOpacity={0.9}
+              onPress={() => router.push(item.route as never)}
+              className="w-[48%] bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm shadow-black/5 mb-4"
+            >
               <View className="w-12 h-12 rounded-full items-center justify-center mb-4" style={{ backgroundColor: `${item.color}15` }}>
                 <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={22} color={item.color} />
               </View>
               <Text className="text-[24px] font-black text-[#1A2C42]">{item.value}</Text>
               <Text className="text-[12px] font-bold tracking-[0.16em] uppercase text-[#7C8B95] mt-2">{item.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 

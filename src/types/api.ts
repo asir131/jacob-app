@@ -224,13 +224,14 @@ export type GigAnalyticsResponse = {
     status?: string;
   };
   summary?: {
-    servicesPageVisibleClients?: number;
-    detailPageUniqueClients?: number;
+    totalIncome?: number;
+    completedPaidOrders?: number;
+    periodDays?: number;
   };
   detailViewSeries?: {
     date?: string;
     label?: string;
-    count?: number;
+    earnings?: number;
   }[];
 };
 

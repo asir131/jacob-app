@@ -76,6 +76,10 @@ export default function ServiceDetailsPage() {
       router.push("/(auth)/login");
       return;
     }
+    if (user?.role === "provider") {
+      Alert.alert("Switch to client", "Providers cannot place service orders. Please switch to a client account.");
+      return;
+    }
     router.push({ pathname: "/book-service", params: { id: service.id, packageName: activePackage.name } });
   };
 

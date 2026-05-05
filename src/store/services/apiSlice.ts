@@ -150,6 +150,25 @@ export const apiSlice = createApi({
       query: () => "/api/orders/provider/dashboard",
       providesTags: ["Orders", "Profile"],
     }),
+    getProviderRatings: builder.query<
+      ApiEnvelope<{
+        items?: any[];
+        summary?: {
+          averageRating?: number;
+          reviewCount?: number;
+        };
+        pagination?: Paginated<any>["pagination"];
+      }>,
+      { page?: number; limit?: number } | void
+    >({
+      query: (args) => {
+        const params = new URLSearchParams();
+        params.set("page", String(args?.page ?? 1));
+        params.set("limit", String(args?.limit ?? 8));
+        return `/api/orders/provider/ratings?${params.toString()}`;
+      },
+      providesTags: ["Orders", "Profile"],
+    }),
     getClientServiceRequests: builder.query<
       ApiEnvelope<Paginated<ServiceRequestSummary>>,
       { page?: number; limit?: number; status?: string; search?: string }
@@ -745,6 +764,7 @@ export const {
   useGetPublicProviderProfileQuery,
   useGetClientDashboardQuery,
   useGetProviderDashboardQuery,
+  useGetProviderRatingsQuery,
   useGetClientServiceRequestsQuery,
   useGetProviderServiceRequestsQuery,
   useAcceptServiceRequestMutation,

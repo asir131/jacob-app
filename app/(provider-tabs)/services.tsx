@@ -25,6 +25,14 @@ import {
 } from "@/src/store/services/apiSlice";
 
 const kmToMiles = (km?: number | null) => ((Number(km || 0) * 0.621371) || 0).toFixed(1);
+const formatMoney = (value?: number | null) => formatCurrency(Number(value || 0));
+const formatCompactMoney = (value?: number | null) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Number(value || 0));
 
 export default function ProviderServices() {
   const router = useRouter();
@@ -138,13 +146,41 @@ export default function ProviderServices() {
   const activeAnalyticsData =
     analyticsData?.data?.gig?.id && analyticsData.data.gig.id === analyticsGig?.id ? analyticsData.data : null;
   const analyticsSummary = activeAnalyticsData?.summary;
-  const analyticsSeries = Array.isArray(activeAnalyticsData?.detailViewSeries)
-    ? activeAnalyticsData.detailViewSeries.map((item) => ({
-        label: item.label || "",
-        count: Number(item.count || 0),
-      }))
-    : [];
-  const maxAnalyticsCount = Math.max(1, ...analyticsSeries.map((item) => item.count));
+  const analyticsSeries = useMemo(
+    () =>
+      Array.isArray(activeAnalyticsData?.detailViewSeries)
+        ? activeAnalyticsData.detailViewSeries.map((item) => ({
+            label: item.label || "",
+            earnings: Number(item.earnings || 0),
+          }))
+        : [],
+    [activeAnalyticsData?.detailViewSeries]
+  );
+  const maxAnalyticsEarnings = Math.max(1, ...analyticsSeries.map((item) => item.earnings));
+  const analyticsTrendSummary = useMemo(() => {
+    if (!analyticsSeries.length) {
+      return {
+        averageDailyIncome: 0,
+        bestDayIncome: 0,
+        bestDayLabel: "",
+        activeIncomeDays: 0,
+      };
+    }
+
+    const totalIncome = analyticsSeries.reduce((sum, item) => sum + Number(item.earnings || 0), 0);
+    const bestDay = analyticsSeries.reduce(
+      (top, item) => (Number(item.earnings || 0) > Number(top.earnings || 0) ? item : top),
+      analyticsSeries[0]
+    );
+
+    return {
+      averageDailyIncome: totalIncome / analyticsSeries.length,
+      bestDayIncome: Number(bestDay?.earnings || 0),
+      bestDayLabel: bestDay?.label || "",
+      activeIncomeDays: analyticsSeries.filter((item) => Number(item.earnings || 0) > 0).length,
+    };
+  }, [analyticsSeries]);
+  const analyticsLabelStep = analyticsSeries.length > 10 ? Math.ceil(analyticsSeries.length / 6) : 1;
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
@@ -315,69 +351,128 @@ export default function ProviderServices() {
 
       <Modal visible={Boolean(analyticsGig)} transparent animationType="fade" onRequestClose={() => setAnalyticsGig(null)}>
         <View className="flex-1 bg-black/45 items-center justify-center px-5">
-          <View className="w-full max-w-[420px] rounded-[28px] bg-white overflow-hidden">
-            <View className="px-6 py-5 border-b border-gray-100">
-              <Text className="text-[22px] font-black text-[#1A2C42]">Gig Analytics</Text>
-              <Text className="text-[13px] text-[#7C8B95] mt-2">
-                {analyticsGig?.title || "Selected gig"} performance from logged-in client activity.
+          <View className="w-full max-w-[440px] rounded-[28px] bg-white overflow-hidden border border-[#E2E8F0]">
+            <View className="px-6 py-5 border-b border-gray-100 bg-white">
+              <Text className="text-[24px] font-black text-[#1A2C42]">Gig Analytics</Text>
+              <Text className="text-[13px] text-[#7C8B95] mt-2 leading-[20px]">
+                {analyticsGig?.title || "Selected gig"} income for the last 30 days.
               </Text>
             </View>
 
-            <ScrollView className="max-h-[70vh]" contentContainerStyle={{ padding: 24 }}>
+            <ScrollView className="max-h-[72vh]" contentContainerStyle={{ padding: 24 }}>
               <View className="flex-row mb-4">
-                <View className="flex-1 mr-3 rounded-[22px] bg-[#F8FAFC] px-4 py-5">
-                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Visible On Services</Text>
+                <View className="flex-1 mr-3 rounded-[22px] bg-[#F8FAFC] px-4 py-5 border border-[#E2E8F0]">
+                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Last 30 Days Income</Text>
                   <Text className="text-[30px] font-black text-[#1A2C42] mt-3">
-                    {analyticsLoading ? "..." : Number(analyticsSummary?.servicesPageVisibleClients || 0)}
+                    {analyticsLoading ? "..." : formatMoney(analyticsSummary?.totalIncome || 0)}
                   </Text>
                   <Text className="text-[12px] leading-[18px] text-[#7C8B95] mt-2">
-                    Unique logged-in clients who saw this gig on services.
+                    Provider earnings from this gig over the last 30 days.
                   </Text>
                 </View>
 
-                <View className="flex-1 rounded-[22px] bg-[#F8FAFC] px-4 py-5">
-                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Detail Visits</Text>
+                <View className="flex-1 rounded-[22px] bg-[#F8FAFC] px-4 py-5 border border-[#E2E8F0]">
+                  <Text className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Paid Completed Orders</Text>
                   <Text className="text-[30px] font-black text-[#1A2C42] mt-3">
-                    {analyticsLoading ? "..." : Number(analyticsSummary?.detailPageUniqueClients || 0)}
+                    {analyticsLoading ? "..." : Number(analyticsSummary?.completedPaidOrders || 0)}
                   </Text>
                   <Text className="text-[12px] leading-[18px] text-[#7C8B95] mt-2">
-                    Unique logged-in clients who opened the detail page.
+                    Orders that contributed income in this 30-day window.
                   </Text>
                 </View>
               </View>
 
-              <View className="rounded-[22px] bg-[#F8FAFC] px-4 py-5">
-                <Text className="text-[18px] font-black text-[#1A2C42]">Detail Page Visits Trend</Text>
-                <Text className="text-[13px] text-[#7C8B95] mt-1">Daily unique client visits over the last 14 days.</Text>
+              <View className="rounded-[22px] border border-[#E2E8F0] bg-white p-4">
+                <View className="mb-4">
+                  <Text className="text-[18px] font-black text-[#1A2C42]">Daily Income Trend</Text>
+                  <Text className="text-[13px] text-[#7C8B95] mt-1">Earnings from this gig across the last 30 days.</Text>
+                </View>
 
                 {analyticsLoading ? (
-                  <View className="h-[220px] items-center justify-center">
+                  <View className="h-[260px] rounded-[18px] bg-[#F8FAFC] items-center justify-center">
                     <ActivityIndicator color="#2286BE" size="large" />
                   </View>
                 ) : analyticsSeries.length ? (
-                  <View className="mt-6">
-                    <View className="flex-row items-end justify-between h-[180px]">
-                      {analyticsSeries.map((item) => (
-                        <View key={item.label} className="flex-1 items-center justify-end mx-[2px]">
-                          <Text className="text-[10px] font-bold text-[#2286BE] mb-2">{item.count}</Text>
-                          <View
-                            className="w-full rounded-t-[10px] bg-[#2286BE]"
-                            style={{ height: Math.max(8, (item.count / maxAnalyticsCount) * 120) }}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                    <View className="flex-row justify-between mt-3">
-                      {analyticsSeries.map((item) => (
-                        <Text key={`${item.label}-axis`} className="flex-1 text-center text-[10px] font-bold text-[#94A3B8]">
-                          {item.label}
+                  <View className="rounded-[18px] border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                    <View className="flex-row mb-4">
+                      <View className="flex-1 mr-3 rounded-[16px] bg-white px-3 py-3">
+                        <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Avg / Day</Text>
+                        <Text className="text-[18px] font-black text-[#1A2C42] mt-2">
+                          {formatMoney(analyticsTrendSummary.averageDailyIncome)}
                         </Text>
-                      ))}
+                      </View>
+                      <View className="flex-1 rounded-[16px] bg-white px-3 py-3">
+                        <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Best Day</Text>
+                        <Text className="text-[18px] font-black text-[#1A2C42] mt-2">
+                          {formatMoney(analyticsTrendSummary.bestDayIncome)}
+                        </Text>
+                        <Text className="text-[11px] font-semibold text-[#7C8B95] mt-1">
+                          {analyticsTrendSummary.bestDayLabel || "No peak day"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="rounded-[16px] bg-white px-3 py-3 mb-4">
+                      <Text className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">Earning Days</Text>
+                      <Text className="text-[18px] font-black text-[#1A2C42] mt-2">
+                        {analyticsTrendSummary.activeIncomeDays}
+                      </Text>
+                      <Text className="text-[11px] font-semibold text-[#7C8B95] mt-1">
+                        Days with income recorded
+                      </Text>
+                    </View>
+
+                    <View className="rounded-[16px] bg-white p-3">
+                      <View className="flex-row items-center justify-between mb-3">
+                        <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">
+                          Trend Chart
+                        </Text>
+                        <Text className="text-[11px] font-bold text-[#2286BE]">
+                          Max {formatCompactMoney(maxAnalyticsEarnings)}
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-end h-[190px]">
+                        <View className="justify-between h-full mr-3 pb-5">
+                          {[maxAnalyticsEarnings, maxAnalyticsEarnings / 2, 0].map((value, index) => (
+                            <Text key={`axis-${index}`} className="text-[10px] font-bold text-[#94A3B8]">
+                              {formatCompactMoney(value)}
+                            </Text>
+                          ))}
+                        </View>
+
+                        <View className="flex-1">
+                          <View className="absolute left-0 right-0 top-0 border-t border-dashed border-[#E2E8F0]" />
+                          <View className="absolute left-0 right-0 top-1/2 border-t border-dashed border-[#E2E8F0]" />
+                          <View className="absolute left-0 right-0 bottom-5 border-t border-dashed border-[#E2E8F0]" />
+
+                          <View className="flex-row items-end justify-between h-[165px]">
+                            {analyticsSeries.map((item, index) => (
+                              <View key={`${item.label}-${index}`} className="flex-1 items-center justify-end mx-[1px]">
+                                <View
+                                  className="w-full rounded-t-[10px] bg-[#2286BE]"
+                                  style={{ height: Math.max(10, (item.earnings / maxAnalyticsEarnings) * 135) }}
+                                />
+                              </View>
+                            ))}
+                          </View>
+
+                          <View className="flex-row justify-between mt-3">
+                            {analyticsSeries.map((item, index) => (
+                              <View key={`${item.label}-axis`} className="flex-1 items-center">
+                                <Text className="text-[10px] font-bold text-[#94A3B8]">
+                                  {index % analyticsLabelStep === 0 || index === analyticsSeries.length - 1 ? item.label : ""}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      </View>
                     </View>
                   </View>
                 ) : (
-                  <View className="h-[220px] items-center justify-center">
-                    <Text className="text-[14px] font-bold text-[#7C8B95]">No detail-page visits recorded yet.</Text>
+                  <View className="h-[260px] rounded-[18px] bg-[#F8FAFC] items-center justify-center">
+                    <Text className="text-[14px] font-bold text-[#7C8B95]">No income recorded for this gig in the last 30 days.</Text>
                   </View>
                 )}
               </View>

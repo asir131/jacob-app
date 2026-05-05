@@ -40,6 +40,10 @@ export default function BookServicePage() {
   const activePackage = useMemo(() => packageList[selectedPackage] || packageList[0] || null, [packageList, selectedPackage]);
 
   const continueStep = async () => {
+    if (user?.role === "provider") {
+      return;
+    }
+
     if (step === 1) {
       setStep(2);
       return;
@@ -80,6 +84,23 @@ export default function BookServicePage() {
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-8" edges={["top"]}>
         <Text className="text-[20px] font-bold text-[#1A2C42] mb-3">Booking not available</Text>
         <TouchableOpacity onPress={() => router.back()} className="bg-[#2B84B1] px-5 py-3 rounded-[18px]">
+          <Text className="text-white font-bold">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (user?.role === "provider") {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8" edges={["top"]}>
+        <View className="w-20 h-20 rounded-full bg-[#FEF3C7] items-center justify-center mb-6">
+          <Ionicons name="shield-checkmark-outline" size={34} color="#D97706" />
+        </View>
+        <Text className="text-[24px] font-black text-[#1A2C42] text-center">Switch to client to order</Text>
+        <Text className="text-[15px] leading-[24px] text-[#7C8B95] text-center mt-3 max-w-[300px]">
+          Providers cannot place service orders from this account. Please switch to a client account to continue.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} className="bg-[#2B84B1] px-6 py-4 rounded-[18px] mt-8">
           <Text className="text-white font-bold">Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>

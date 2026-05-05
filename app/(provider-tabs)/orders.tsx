@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,7 +28,7 @@ import type { OrderSummary, ServiceRequestSummary } from "@/src/types/api";
 const filters = [
   { id: "all", label: "All" },
   { id: "pending", label: "New" },
-  { id: "accepted", label: "Active" },
+  { id: "active", label: "Active" },
   { id: "accepting_delivery", label: "Delivered" },
   { id: "completed", label: "Completed" },
   { id: "declined", label: "Cancelled" },
@@ -36,6 +36,7 @@ const filters = [
 
 export default function ProviderOrders() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ status?: string }>();
   const { socket } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight =
@@ -93,6 +94,13 @@ export default function ProviderOrders() {
     [requestsData?.data.items]
   );
   const pagination = data?.data.pagination;
+
+  useEffect(() => {
+    const requestedStatus = typeof params.status === "string" ? params.status : "all";
+    const allowedStatuses = new Set(filters.map((item) => item.id));
+    setFilter(allowedStatuses.has(requestedStatus) ? requestedStatus : "all");
+    setPage(1);
+  }, [params.status]);
 
   useFocusEffect(
     useCallback(() => {
