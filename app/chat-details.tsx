@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,9 +29,10 @@ import {
   registerGlobals,
 } from "react-native-webrtc";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import InCallManager from "react-native-incall-manager";
 
 import { useAuth } from "@/src/contexts/AuthContext";
-import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import { PENDING_INCOMING_CALL_STORAGE_KEY, useSocketNotifications } from "@/src/contexts/SocketContext";
 import {
   useBlockConversationUserMutation,
   useClearConversationHistoryMutation,
@@ -94,6 +96,8 @@ const formatCallDuration = (totalSeconds: number) => {
   return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 };
 
+const safeInCallManager = InCallManager && typeof InCallManager === "object" ? InCallManager : null;
+
 const ProfileAvatar = ({
   uri,
   size,
@@ -141,6 +145,7 @@ export default function ChatDetailsPage() {
     blockedBy?: string;
     targetUserId?: string;
     targetUserRole?: string;
+    incomingCall?: string;
   }>();
 
   const readParam = (value?: string | string[]) => {
@@ -153,6 +158,7 @@ export default function ChatDetailsPage() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const activeCallRef = useRef<ActiveCallRef | null>(null);
+  const pendingIncomingCallLoadedRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -192,6 +198,7 @@ export default function ChatDetailsPage() {
   const blockedByParam = readParam(params.blockedBy);
   const targetUserIdParam = readParam(params.targetUserId);
   const targetUserRoleParam = readParam(params.targetUserRole);
+  const incomingCallParam = readParam(params.incomingCall);
   const conversationId = resolvedConversationId || conversationIdParam;
   const conversations = useMemo(() => conversationsPayload?.data || [], [conversationsPayload]);
   const selectedConversation = useMemo(
@@ -242,6 +249,30 @@ export default function ChatDetailsPage() {
         : "User";
 
   useEffect(() => {
+    if (pendingIncomingCallLoadedRef.current || incomingCallParam !== "1") return;
+    pendingIncomingCallLoadedRef.current = true;
+
+    const loadPendingIncomingCall = async () => {
+      const raw = await AsyncStorage.getItem(PENDING_INCOMING_CALL_STORAGE_KEY);
+      if (!raw) return;
+      await AsyncStorage.removeItem(PENDING_INCOMING_CALL_STORAGE_KEY);
+
+      try {
+        const payload = JSON.parse(raw) as CallInvitePayload;
+        if (!payload?.conversationId || !payload?.callType) return;
+        setResolvedConversationId(payload.conversationId);
+        setIncomingCall(payload);
+        setActiveCall(payload.callType);
+        setCallStatus("ringing");
+      } catch {
+        await AsyncStorage.removeItem(PENDING_INCOMING_CALL_STORAGE_KEY);
+      }
+    };
+
+    void loadPendingIncomingCall();
+  }, [incomingCallParam]);
+
+  useEffect(() => {
     setResolvedConversationId(conversationIdParam);
   }, [conversationIdParam]);
 
@@ -288,7 +319,22 @@ export default function ChatDetailsPage() {
     stream.getTracks().forEach((track) => track.stop());
   }, []);
 
+  const startCallAudioRoute = useCallback((callType: CallType) => {
+    if (!safeInCallManager) return;
+    safeInCallManager.start?.({ media: callType === "video" ? "video" : "audio" });
+    safeInCallManager.setForceSpeakerphoneOn?.(callType === "video");
+    safeInCallManager.setSpeakerphoneOn?.(callType === "video");
+  }, []);
+
+  const stopCallAudioRoute = useCallback(() => {
+    if (!safeInCallManager) return;
+    safeInCallManager.setForceSpeakerphoneOn?.(false);
+    safeInCallManager.setSpeakerphoneOn?.(false);
+    safeInCallManager.stop?.();
+  }, []);
+
   const resetCallState = useCallback(() => {
+    stopCallAudioRoute();
     peerRef.current?.close();
     peerRef.current = null;
     stopStream(localStreamRef.current);
@@ -304,7 +350,7 @@ export default function ChatDetailsPage() {
     setCallStartedAt(null);
     setCallSeconds(0);
     setCallError("");
-  }, [stopStream]);
+  }, [stopCallAudioRoute, stopStream]);
 
   const cleanupCall = useCallback(
     (shouldNotifyPeer = false) => {
@@ -410,6 +456,7 @@ export default function ChatDetailsPage() {
         resetCallState();
         setActiveCall(callType);
         setCallStatus("connecting");
+        startCallAudioRoute(callType);
 
         const stream = await createLocalStream(callType);
         localStreamRef.current = stream;
@@ -449,7 +496,7 @@ export default function ChatDetailsPage() {
         Alert.alert("Call failed", message);
       }
     },
-    [attachPeerListeners, canStartCalls, conversationId, createLocalStream, resetCallState, socket, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
+    [attachPeerListeners, canStartCalls, conversationId, createLocalStream, resetCallState, socket, startCallAudioRoute, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
   );
 
   const acceptIncomingCall = useCallback(async () => {
@@ -466,6 +513,7 @@ export default function ChatDetailsPage() {
       setIncomingCall(incomingCall);
       setActiveCall(incomingCall.callType);
       setCallStatus("connecting");
+      startCallAudioRoute(incomingCall.callType);
 
       const stream = await createLocalStream(incomingCall.callType);
       localStreamRef.current = stream;
@@ -507,7 +555,7 @@ export default function ChatDetailsPage() {
       setCallError(message);
       Alert.alert("Call failed", message);
     }
-  }, [attachPeerListeners, createLocalStream, incomingCall, resetCallState, socket]);
+  }, [attachPeerListeners, createLocalStream, incomingCall, resetCallState, socket, startCallAudioRoute]);
 
   const declineIncomingCall = useCallback(() => {
     if (socket && incomingCall?.senderId) {
