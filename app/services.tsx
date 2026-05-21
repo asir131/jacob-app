@@ -3,8 +3,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Image,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -96,7 +96,7 @@ export default function ServicesPage() {
         </View>
       </View>
 
-      <View className="flex-1">
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 mt-6 mb-4 flex-row justify-between items-center">
           <View className="flex-row items-center">
             <View className="w-1.5 h-6 bg-[#2B84B1] rounded-full mr-3.5" />
@@ -107,57 +107,40 @@ export default function ServicesPage() {
           </Text>
         </View>
 
-        <FlatList
-          data={services}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <>
-              <View className="mb-4">
-                <FlatList
-                  data={providerTypeOptions}
-                  horizontal
-                  keyExtractor={(item) => item}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 24 }}
-                  renderItem={({ item }) => {
-                    const active = providerType === item;
-                    return (
-                      <TouchableOpacity
-                        onPress={() => setProviderType(item)}
-                        className={`px-4 py-3 rounded-full mr-3 border ${active ? "bg-[#2286BE] border-[#2286BE]" : "bg-white border-gray-200"}`}
-                      >
-                        <Text className={`font-bold text-[13px] ${active ? "text-white" : "text-[#64748B]"}`}>{item}</Text>
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
-              </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4" contentContainerStyle={{ paddingHorizontal: 24 }}>
+          {providerTypeOptions.map((item) => {
+            const active = providerType === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                onPress={() => setProviderType(item)}
+                className={`px-4 py-3 rounded-full mr-3 border ${active ? "bg-[#2286BE] border-[#2286BE]" : "bg-white border-gray-200"}`}
+              >
+                <Text className={`font-bold text-[13px] ${active ? "text-white" : "text-[#64748B]"}`}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-              <View className="mb-6">
-                <FlatList
-                  data={ratingOptions}
-                  horizontal
-                  keyExtractor={(item) => String(item.id)}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 24 }}
-                  renderItem={({ item }) => {
-                    const active = minRating === item.id;
-                    return (
-                      <TouchableOpacity
-                        onPress={() => setMinRating(item.id)}
-                        className={`px-4 py-3 rounded-full mr-3 border ${active ? "bg-[#1A2C42] border-[#1A2C42]" : "bg-white border-gray-200"}`}
-                      >
-                        <Text className={`font-bold text-[13px] ${active ? "text-white" : "text-[#64748B]"}`}>{item.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
-              </View>
-            </>
-          }
-          renderItem={({ item }) => (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6" contentContainerStyle={{ paddingHorizontal: 24 }}>
+          {ratingOptions.map((item) => {
+            const active = minRating === item.id;
+            return (
+              <TouchableOpacity
+                key={String(item.id)}
+                onPress={() => setMinRating(item.id)}
+                className={`px-4 py-3 rounded-full mr-3 border ${active ? "bg-[#1A2C42] border-[#1A2C42]" : "bg-white border-gray-200"}`}
+              >
+                <Text className={`font-bold text-[13px] ${active ? "text-white" : "text-[#64748B]"}`}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {services.length ? (
+          services.map((item) => (
             <TouchableOpacity
+              key={item.id}
               onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })}
               className="mb-6 mx-6 rounded-[28px] bg-white border border-gray-100 shadow-sm shadow-black/5 overflow-hidden"
             >
@@ -214,8 +197,8 @@ export default function ServicesPage() {
                 </View>
               </View>
             </TouchableOpacity>
-          )}
-        ListEmptyComponent={
+          ))
+        ) : (
           isLoading || isFetching ? (
             <View className="items-center justify-center py-20">
               <ActivityIndicator size="large" color="#2B84B1" />
@@ -244,32 +227,30 @@ export default function ServicesPage() {
               </TouchableOpacity>
             </View>
           )
-        }
-          ListFooterComponent={
-            pagination && pagination.totalPages > 1 ? (
-              <View className="mx-6 mt-2 mb-8 bg-white rounded-[20px] border border-gray-100 px-4 py-4 flex-row items-center justify-between">
-                <TouchableOpacity
-                  disabled={!pagination.hasPrevPage}
-                  onPress={() => setPage((prev) => Math.max(1, prev - 1))}
-                  className={`px-4 py-3 rounded-[16px] ${pagination.hasPrevPage ? "bg-[#F8FAFC]" : "bg-[#E2E8F0]"}`}
-                >
-                  <Text className={`font-bold ${pagination.hasPrevPage ? "text-[#1A2C42]" : "text-[#94A3B8]"}`}>Prev</Text>
-                </TouchableOpacity>
-                <Text className="text-[13px] font-bold tracking-[0.18em] uppercase text-[#64748B]">
-                  {page} / {pagination.totalPages}
-                </Text>
-                <TouchableOpacity
-                  disabled={!pagination.hasNextPage}
-                  onPress={() => setPage((prev) => prev + 1)}
-                  className={`px-4 py-3 rounded-[16px] ${pagination.hasNextPage ? "bg-[#F8FAFC]" : "bg-[#E2E8F0]"}`}
-                >
-                  <Text className={`font-bold ${pagination.hasNextPage ? "text-[#1A2C42]" : "text-[#94A3B8]"}`}>Next</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null
-          }
-        />
-      </View>
+        )}
+
+        {pagination && pagination.totalPages > 1 ? (
+          <View className="mx-6 mt-2 mb-8 bg-white rounded-[20px] border border-gray-100 px-4 py-4 flex-row items-center justify-between">
+            <TouchableOpacity
+              disabled={!pagination.hasPrevPage}
+              onPress={() => setPage((prev) => Math.max(1, prev - 1))}
+              className={`px-4 py-3 rounded-[16px] ${pagination.hasPrevPage ? "bg-[#F8FAFC]" : "bg-[#E2E8F0]"}`}
+            >
+              <Text className={`font-bold ${pagination.hasPrevPage ? "text-[#1A2C42]" : "text-[#94A3B8]"}`}>Prev</Text>
+            </TouchableOpacity>
+            <Text className="text-[13px] font-bold tracking-[0.18em] uppercase text-[#64748B]">
+              {page} / {pagination.totalPages}
+            </Text>
+            <TouchableOpacity
+              disabled={!pagination.hasNextPage}
+              onPress={() => setPage((prev) => prev + 1)}
+              className={`px-4 py-3 rounded-[16px] ${pagination.hasNextPage ? "bg-[#F8FAFC]" : "bg-[#E2E8F0]"}`}
+            >
+              <Text className={`font-bold ${pagination.hasNextPage ? "text-[#1A2C42]" : "text-[#94A3B8]"}`}>Next</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </ScrollView>
     </SafeAreaView>
   );
 }

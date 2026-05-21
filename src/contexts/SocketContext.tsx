@@ -8,9 +8,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter } from "expo-router";
+import { router } from "expo-router";
 import { io, type Socket } from "socket.io-client";
-import { Modal, Text, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -36,6 +36,7 @@ type SocketContextValue = {
 
 const NOTIFICATIONS_STORAGE_KEY = "live_notifications";
 export const PENDING_INCOMING_CALL_STORAGE_KEY = "pending_incoming_call";
+export const PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY = "pending_incoming_call_candidates";
 const SocketContext = createContext<SocketContextValue | undefined>(undefined);
 
 type CallInvitePayload = {
@@ -49,15 +50,21 @@ type CallInvitePayload = {
   offer?: RTCSessionDescriptionInit;
 };
 
+type CallSignalPayload = {
+  conversationId: string;
+  senderId?: string;
+  signalType?: "offer" | "answer" | "candidate";
+  signal?: RTCIceCandidateInit;
+};
+
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { accessToken, isAuthenticated, updateProfile, user } = useAuth();
-  const pathname = usePathname();
-  const router = useRouter();
   const dispatch = useAppDispatch();
   const notifications = useAppSelector((state) => state.notifications.items);
   const socketConnected = useAppSelector((state) => state.notifications.socketConnected);
   const socketRef = useRef<Socket | null>(null);
   const incomingCallRef = useRef<CallInvitePayload | null>(null);
+  const acceptedIncomingCallRef = useRef<CallInvitePayload | null>(null);
   const walletBalanceRef = useRef(0);
   const totalEarningsRef = useRef(0);
   const [incomingCall, setIncomingCall] = useState<CallInvitePayload | null>(null);
@@ -164,18 +171,50 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     socket.on("call:invite", (payload: CallInvitePayload) => {
       if (!payload?.conversationId || payload.senderRole === "superAdmin") return;
-      if (pathname === "/chat-details") return;
+      acceptedIncomingCallRef.current = null;
+      void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
       setIncomingCall(payload);
     });
 
+    socket.on("call:signal", (payload: CallSignalPayload) => {
+      const currentIncomingCall = incomingCallRef.current || acceptedIncomingCallRef.current;
+      if (
+        !currentIncomingCall ||
+        payload?.conversationId !== currentIncomingCall.conversationId ||
+        payload.signalType !== "candidate" ||
+        !payload.signal
+      ) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const raw = await AsyncStorage.getItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
+          const existing = raw ? (JSON.parse(raw) as RTCIceCandidateInit[]) : [];
+          const nextCandidates = Array.isArray(existing) ? [...existing, payload.signal!] : [payload.signal!];
+          await AsyncStorage.setItem(
+            PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY,
+            JSON.stringify(nextCandidates)
+          );
+        } catch {
+          await AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
+        }
+      })();
+    });
+
     socket.on("call:end", (payload: { conversationId?: string }) => {
-      if (payload?.conversationId && payload.conversationId === incomingCallRef.current?.conversationId) {
+      const currentIncomingCall = incomingCallRef.current || acceptedIncomingCallRef.current;
+      if (payload?.conversationId && payload.conversationId === currentIncomingCall?.conversationId) {
         setIncomingCall(null);
+        acceptedIncomingCallRef.current = null;
+        void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
       }
     });
 
     socket.on("call:blocked", () => {
       setIncomingCall(null);
+      acceptedIncomingCallRef.current = null;
+      void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
     });
 
     return () => {
@@ -183,20 +222,22 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socketRef.current = null;
       dispatch(setSocketConnectedState(false));
     };
-  }, [accessToken, dispatch, isAuthenticated, pathname, updateProfile]);
+  }, [accessToken, dispatch, isAuthenticated, updateProfile]);
 
   const acceptIncomingCall = useCallback(async () => {
     if (!incomingCall) return;
     await AsyncStorage.setItem(PENDING_INCOMING_CALL_STORAGE_KEY, JSON.stringify(incomingCall));
+    acceptedIncomingCallRef.current = incomingCall;
     setIncomingCall(null);
-    router.push({
+    router.replace({
       pathname: "/chat-details",
       params: {
         conversationId: incomingCall.conversationId,
         incomingCall: "1",
+        autoAcceptIncomingCall: "1",
       },
     });
-  }, [incomingCall, router]);
+  }, [incomingCall]);
 
   const cancelIncomingCall = useCallback(() => {
     if (incomingCall?.senderId && socketRef.current) {
@@ -208,6 +249,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       });
     }
     setIncomingCall(null);
+    acceptedIncomingCallRef.current = null;
+    void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
   }, [incomingCall]);
 
   const unreadCount = useMemo(
@@ -237,46 +280,46 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
       <Modal visible={Boolean(incomingCall)} transparent animationType="fade" onRequestClose={cancelIncomingCall}>
-        <View className="flex-1 items-center justify-center bg-slate-950/70 px-5">
-          <View className="w-full max-w-sm overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <View className="bg-[#2286BE] px-5 py-5">
-              <View className="flex-row items-center gap-4">
-                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
+        <View style={styles.callOverlay}>
+          <View style={styles.callCard}>
+            <View style={styles.callHeader}>
+              <View style={styles.callHeaderRow}>
+                <View style={styles.callIconWrap}>
                   <Ionicons
                     name={incomingCall?.callType === "video" ? "videocam" : "call"}
                     size={28}
                     color="#fff"
                   />
                 </View>
-                <View className="flex-1">
-                  <Text className="text-[11px] font-black uppercase tracking-[2px] text-white/75">
+                <View style={styles.callTitleWrap}>
+                  <Text style={styles.callEyebrow}>
                     Incoming {incomingCall?.callType === "video" ? "Video" : "Voice"} Call
                   </Text>
-                  <Text className="mt-1 text-2xl font-black text-white">
+                  <Text style={styles.callTitle} numberOfLines={2}>
                     {incomingCall?.senderName || "Someone"} is calling
                   </Text>
                 </View>
               </View>
             </View>
 
-            <View className="px-5 py-5">
-              <Text className="text-sm font-bold leading-5 text-slate-600">
-                Accept to open the conversation and connect the call.
+            <View style={styles.callBody}>
+              <Text style={styles.callMessage}>
+                Receive to open the conversation and connect the call.
               </Text>
-              <View className="mt-5 flex-row gap-3">
+              <View style={styles.callActions}>
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={cancelIncomingCall}
-                  className="h-12 flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-white"
+                  style={[styles.callButton, styles.declineButton]}
                 >
-                  <Text className="font-black text-slate-600">Cancel</Text>
+                  <Text style={styles.declineButtonText}>Decline</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={acceptIncomingCall}
-                  className="h-12 flex-1 items-center justify-center rounded-2xl bg-emerald-500"
+                  style={[styles.callButton, styles.receiveButton]}
                 >
-                  <Text className="font-black text-white">Accept</Text>
+                  <Text style={styles.receiveButtonText}>Receive</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -286,6 +329,101 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     </SocketContext.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  callOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(2, 6, 23, 0.72)",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  callCard: {
+    width: "100%",
+    maxWidth: 360,
+    overflow: "hidden",
+    borderRadius: 28,
+    backgroundColor: "#fff",
+  },
+  callHeader: {
+    backgroundColor: "#2286BE",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  callHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  callIconWrap: {
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    marginRight: 14,
+  },
+  callTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  callEyebrow: {
+    color: "rgba(255, 255, 255, 0.75)",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  callTitle: {
+    marginTop: 4,
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 28,
+  },
+  callBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  callMessage: {
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  callActions: {
+    flexDirection: "row",
+    marginTop: 18,
+  },
+  callButton: {
+    flex: 1,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+  },
+  declineButton: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#fff",
+    marginRight: 10,
+  },
+  receiveButton: {
+    backgroundColor: "#10B981",
+    marginLeft: 10,
+  },
+  declineButtonText: {
+    color: "#475569",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  receiveButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+});
 
 export function useSocketNotifications() {
   const context = useContext(SocketContext);

@@ -9,6 +9,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   PermissionsAndroid,
   Platform,
@@ -28,11 +29,16 @@ import {
   mediaDevices,
   registerGlobals,
 } from "react-native-webrtc";
+import type { RTCSessionDescriptionInit as NativeRTCSessionDescriptionInit } from "react-native-webrtc/lib/typescript/RTCSessionDescription";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import InCallManager from "react-native-incall-manager";
 
 import { useAuth } from "@/src/contexts/AuthContext";
-import { PENDING_INCOMING_CALL_STORAGE_KEY, useSocketNotifications } from "@/src/contexts/SocketContext";
+import {
+  PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY,
+  PENDING_INCOMING_CALL_STORAGE_KEY,
+  useSocketNotifications,
+} from "@/src/contexts/SocketContext";
 import {
   useBlockConversationUserMutation,
   useClearConversationHistoryMutation,
@@ -66,7 +72,7 @@ type CallInvitePayload = {
   senderName?: string;
   senderAvatar?: string;
   callType: CallType;
-  offer?: RTCSessionDescriptionInit;
+  offer?: NativeRTCSessionDescriptionInit;
 };
 
 type CallSignalPayload = {
@@ -74,7 +80,7 @@ type CallSignalPayload = {
   targetUserId?: string;
   senderId?: string;
   signalType?: "offer" | "answer" | "candidate";
-  signal?: RTCSessionDescriptionInit | RTCIceCandidateInit;
+  signal?: NativeRTCSessionDescriptionInit | RTCIceCandidateInit;
   callType?: CallType;
 };
 
@@ -146,6 +152,7 @@ export default function ChatDetailsPage() {
     targetUserId?: string;
     targetUserRole?: string;
     incomingCall?: string;
+    autoAcceptIncomingCall?: string;
   }>();
 
   const readParam = (value?: string | string[]) => {
@@ -158,6 +165,7 @@ export default function ChatDetailsPage() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const activeCallRef = useRef<ActiveCallRef | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const pendingIncomingCallLoadedRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -182,6 +190,7 @@ export default function ChatDetailsPage() {
   const [callSeconds, setCallSeconds] = useState(0);
   const [localStreamUrl, setLocalStreamUrl] = useState<string | null>(null);
   const [remoteStreamUrl, setRemoteStreamUrl] = useState<string | null>(null);
+  const [autoAcceptIncomingCall, setAutoAcceptIncomingCall] = useState(false);
   const [ensureConversationByOrder, { isLoading: ensuringConversation }] =
     useEnsureConversationByOrderMutation();
   const { data: conversationsPayload } = useGetConversationsQuery();
@@ -192,13 +201,14 @@ export default function ChatDetailsPage() {
   const orderId = readParam(params.orderId);
   const sourceOrderIdParam = readParam(params.sourceOrderId);
   const proposalTypeParam = readParam(params.proposalType);
-  const name = readParam(params.name) || "User";
+  const nameParam = readParam(params.name);
   const avatar = readParam(params.avatar);
   const info = readParam(params.info);
   const blockedByParam = readParam(params.blockedBy);
   const targetUserIdParam = readParam(params.targetUserId);
   const targetUserRoleParam = readParam(params.targetUserRole);
   const incomingCallParam = readParam(params.incomingCall);
+  const autoAcceptIncomingCallParam = readParam(params.autoAcceptIncomingCall);
   const conversationId = resolvedConversationId || conversationIdParam;
   const conversations = useMemo(() => conversationsPayload?.data || [], [conversationsPayload]);
   const selectedConversation = useMemo(
@@ -218,8 +228,16 @@ export default function ChatDetailsPage() {
   const [unblockUser, { isLoading: unblockingUser }] = useUnblockConversationUserMutation();
 
   const initialMessages = useMemo(() => data?.data.items || [], [data]);
-  const displayAvatar = typeof avatar === "string" ? avatar : "";
-  const targetUserId = typeof targetUserIdParam === "string" ? targetUserIdParam : "";
+  const displayName = nameParam || selectedConversation?.otherUser?.name || incomingCall?.senderName || "User";
+  const displayAvatar = avatar || selectedConversation?.otherUser?.avatar || incomingCall?.senderAvatar || "";
+  const displayInfo =
+    info ||
+    selectedConversation?.packageTitle ||
+    selectedConversation?.orderName ||
+    selectedConversation?.categoryName ||
+    selectedConversation?.otherUser?.email ||
+    "";
+  const targetUserId = targetUserIdParam || selectedConversation?.otherUser?.id || incomingCall?.senderId || "";
   const targetUserRole =
     selectedConversation?.otherUser?.role || (typeof targetUserRoleParam === "string" ? targetUserRoleParam : "");
   const isAdminConversation = targetUserRole === "superAdmin" || user?.role === "superAdmin";
@@ -241,12 +259,12 @@ export default function ChatDetailsPage() {
   const canOpenProposalComposer = canCreateCustomProposal || canCreateRepeatProposal;
   const callDurationLabel = useMemo(() => formatCallDuration(callSeconds), [callSeconds]);
   const callModalVisible = Boolean(activeCall || incomingCall);
+  const currentCallType = activeCall || incomingCall?.callType;
+  const isVideoCall = currentCallType === "video";
   const callTitle =
     incomingCall && callStatus === "ringing"
       ? `${incomingCall.senderName || "Incoming caller"}`
-      : typeof name === "string"
-        ? name
-        : "User";
+      : displayName;
 
   useEffect(() => {
     if (pendingIncomingCallLoadedRef.current || incomingCallParam !== "1") return;
@@ -260,17 +278,27 @@ export default function ChatDetailsPage() {
       try {
         const payload = JSON.parse(raw) as CallInvitePayload;
         if (!payload?.conversationId || !payload?.callType) return;
+        const candidatesRaw = await AsyncStorage.getItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
+        await AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
+        try {
+          const parsedCandidates = candidatesRaw ? (JSON.parse(candidatesRaw) as RTCIceCandidateInit[]) : [];
+          pendingIceCandidatesRef.current = Array.isArray(parsedCandidates) ? parsedCandidates : [];
+        } catch {
+          pendingIceCandidatesRef.current = [];
+        }
         setResolvedConversationId(payload.conversationId);
         setIncomingCall(payload);
         setActiveCall(payload.callType);
         setCallStatus("ringing");
+        setAutoAcceptIncomingCall(autoAcceptIncomingCallParam === "1");
       } catch {
         await AsyncStorage.removeItem(PENDING_INCOMING_CALL_STORAGE_KEY);
+        await AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
       }
     };
 
     void loadPendingIncomingCall();
-  }, [incomingCallParam]);
+  }, [autoAcceptIncomingCallParam, incomingCallParam]);
 
   useEffect(() => {
     setResolvedConversationId(conversationIdParam);
@@ -322,12 +350,16 @@ export default function ChatDetailsPage() {
   const startCallAudioRoute = useCallback((callType: CallType) => {
     if (!safeInCallManager) return;
     safeInCallManager.start?.({ media: callType === "video" ? "video" : "audio" });
-    safeInCallManager.setForceSpeakerphoneOn?.(callType === "video");
-    safeInCallManager.setSpeakerphoneOn?.(callType === "video");
+    safeInCallManager.setKeepScreenOn?.(true);
+    safeInCallManager.setMicrophoneMute?.(false);
+    safeInCallManager.setForceSpeakerphoneOn?.(true);
+    safeInCallManager.setSpeakerphoneOn?.(true);
   }, []);
 
   const stopCallAudioRoute = useCallback(() => {
     if (!safeInCallManager) return;
+    safeInCallManager.setKeepScreenOn?.(false);
+    safeInCallManager.setMicrophoneMute?.(false);
     safeInCallManager.setForceSpeakerphoneOn?.(false);
     safeInCallManager.setSpeakerphoneOn?.(false);
     safeInCallManager.stop?.();
@@ -342,6 +374,7 @@ export default function ChatDetailsPage() {
     localStreamRef.current = null;
     remoteStreamRef.current = null;
     activeCallRef.current = null;
+    pendingIceCandidatesRef.current = [];
     setLocalStreamUrl(null);
     setRemoteStreamUrl(null);
     setIncomingCall(null);
@@ -351,6 +384,20 @@ export default function ChatDetailsPage() {
     setCallSeconds(0);
     setCallError("");
   }, [stopCallAudioRoute, stopStream]);
+
+  const flushPendingIceCandidates = useCallback(async (peer: RTCPeerConnection) => {
+    const candidates = pendingIceCandidatesRef.current;
+    if (!candidates.length) return;
+
+    pendingIceCandidatesRef.current = [];
+    for (const candidate of candidates) {
+      try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        // Ignore stale ICE candidates collected before the peer was ready.
+      }
+    }
+  }, []);
 
   const cleanupCall = useCallback(
     (shouldNotifyPeer = false) => {
@@ -385,20 +432,59 @@ export default function ChatDetailsPage() {
       permissions.push(PermissionsAndroid.PERMISSIONS.CAMERA);
     }
 
+    const alreadyGranted = await Promise.all(
+      permissions.map((permission) => PermissionsAndroid.check(permission))
+    );
+    if (alreadyGranted.every(Boolean)) return true;
+
     const result = await PermissionsAndroid.requestMultiple(permissions);
-    return permissions.every((permission) => result[permission] === PermissionsAndroid.RESULTS.GRANTED);
+    const granted = permissions.every((permission) => result[permission] === PermissionsAndroid.RESULTS.GRANTED);
+
+    if (!granted) {
+      const blocked = permissions.some(
+        (permission) => result[permission] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+      );
+
+      Alert.alert(
+        callType === "video" ? "Camera and microphone needed" : "Microphone needed",
+        blocked
+          ? "Please enable microphone permission from app settings to use calls."
+          : "Please allow microphone permission to use calls.",
+        blocked
+          ? [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open Settings", onPress: () => void Linking.openSettings() },
+            ]
+          : [{ text: "OK" }]
+      );
+    }
+
+    return granted;
   }, []);
 
   const attachPeerListeners = useCallback(
     (peer: RTCPeerConnection, callType: CallType) => {
-      peer.ontrack = (event) => {
-        const [stream] = event.streams;
-        if (!stream) return;
-        remoteStreamRef.current = stream;
-        setRemoteStreamUrl(stream.toURL());
+      const peerWithEvents = peer as unknown as {
+        addEventListener: (
+          type: "track" | "icecandidate",
+          listener: (event: { streams?: MediaStream[]; track?: { enabled: boolean } | null; candidate?: RTCIceCandidate | null }) => void
+        ) => void;
       };
 
-      peer.onicecandidate = (event) => {
+      peerWithEvents.addEventListener("track", (event) => {
+        const streams = event.streams || [];
+        const [stream] = streams;
+        if (!stream) return;
+        event.track && (event.track.enabled = true);
+        stream.getTracks().forEach((track) => {
+          track.enabled = true;
+        });
+        remoteStreamRef.current = stream;
+        setRemoteStreamUrl(stream.toURL());
+        startCallAudioRoute(callType);
+      });
+
+      peerWithEvents.addEventListener("icecandidate", (event) => {
         if (!event.candidate || !socket || !activeCallRef.current) return;
         socket.emit("call:signal", {
           conversationId: activeCallRef.current.conversationId,
@@ -407,9 +493,9 @@ export default function ChatDetailsPage() {
           signal: event.candidate.toJSON(),
           callType,
         });
-      };
+      });
     },
-    [socket]
+    [socket, startCallAudioRoute]
   );
 
   const createLocalStream = useCallback(
@@ -431,14 +517,38 @@ export default function ChatDetailsPage() {
               : false,
         });
       } catch (error) {
-        if (callType === "video") {
-          return mediaDevices.getUserMedia({ audio: true, video: false });
-        }
         throw error;
       }
     },
     [requestCallPermissions]
   );
+
+  const prepareLocalStreamForCall = useCallback((stream: MediaStream, callType: CallType) => {
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) {
+      stopStream(stream);
+      throw new Error("Microphone track was not created. Please allow microphone permission and try again.");
+    }
+
+    if (callType === "video" && !stream.getVideoTracks().length) {
+      stopStream(stream);
+      throw new Error("Camera track was not created. Please allow camera permission and try again.");
+    }
+
+    stream.getTracks().forEach((track) => {
+      track.enabled = true;
+    });
+
+    return stream;
+  }, [stopStream]);
+
+  const addLocalTracksToPeer = useCallback((peer: RTCPeerConnection, stream: MediaStream) => {
+    const audioTracks = stream.getAudioTracks();
+    const otherTracks = stream.getTracks().filter((track) => track.kind !== "audio");
+
+    audioTracks.forEach((track) => peer.addTrack(track, stream));
+    otherTracks.forEach((track) => peer.addTrack(track, stream));
+  }, []);
 
   const startOutgoingCall = useCallback(
     async (callType: CallType) => {
@@ -456,11 +566,11 @@ export default function ChatDetailsPage() {
         resetCallState();
         setActiveCall(callType);
         setCallStatus("connecting");
-        startCallAudioRoute(callType);
 
-        const stream = await createLocalStream(callType);
+        const stream = prepareLocalStreamForCall(await createLocalStream(callType), callType);
         localStreamRef.current = stream;
         setLocalStreamUrl(stream.toURL());
+        startCallAudioRoute(callType);
 
         const peer = createPeerConnection();
         peerRef.current = peer;
@@ -470,7 +580,7 @@ export default function ChatDetailsPage() {
           callType,
         };
 
-        stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+        addLocalTracksToPeer(peer, stream);
         attachPeerListeners(peer, callType);
 
         const offer = await peer.createOffer();
@@ -496,7 +606,7 @@ export default function ChatDetailsPage() {
         Alert.alert("Call failed", message);
       }
     },
-    [attachPeerListeners, canStartCalls, conversationId, createLocalStream, resetCallState, socket, startCallAudioRoute, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
+    [addLocalTracksToPeer, attachPeerListeners, canStartCalls, conversationId, createLocalStream, prepareLocalStreamForCall, resetCallState, socket, startCallAudioRoute, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
   );
 
   const acceptIncomingCall = useCallback(async () => {
@@ -509,15 +619,18 @@ export default function ChatDetailsPage() {
     }
 
     try {
+      const bufferedCandidates = pendingIceCandidatesRef.current;
       resetCallState();
+      pendingIceCandidatesRef.current = bufferedCandidates;
+      setResolvedConversationId(incomingCall.conversationId);
       setIncomingCall(incomingCall);
       setActiveCall(incomingCall.callType);
       setCallStatus("connecting");
-      startCallAudioRoute(incomingCall.callType);
 
-      const stream = await createLocalStream(incomingCall.callType);
+      const stream = prepareLocalStreamForCall(await createLocalStream(incomingCall.callType), incomingCall.callType);
       localStreamRef.current = stream;
       setLocalStreamUrl(stream.toURL());
+      startCallAudioRoute(incomingCall.callType);
 
       const peer = createPeerConnection();
       peerRef.current = peer;
@@ -527,11 +640,12 @@ export default function ChatDetailsPage() {
         callType: incomingCall.callType,
       };
 
-      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      addLocalTracksToPeer(peer, stream);
       attachPeerListeners(peer, incomingCall.callType);
 
       if (incomingCall.offer) {
         await peer.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        await flushPendingIceCandidates(peer);
       }
 
       const answer = await peer.createAnswer();
@@ -555,7 +669,7 @@ export default function ChatDetailsPage() {
       setCallError(message);
       Alert.alert("Call failed", message);
     }
-  }, [attachPeerListeners, createLocalStream, incomingCall, resetCallState, socket, startCallAudioRoute]);
+  }, [addLocalTracksToPeer, attachPeerListeners, createLocalStream, flushPendingIceCandidates, incomingCall, prepareLocalStreamForCall, resetCallState, socket, startCallAudioRoute]);
 
   const declineIncomingCall = useCallback(() => {
     if (socket && incomingCall?.senderId) {
@@ -565,8 +679,15 @@ export default function ChatDetailsPage() {
         callType: incomingCall.callType,
       });
     }
+    void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
     resetCallState();
   }, [incomingCall, resetCallState, socket]);
+
+  useEffect(() => {
+    if (!autoAcceptIncomingCall || !incomingCall || !socket || callStatus !== "ringing") return;
+    setAutoAcceptIncomingCall(false);
+    void acceptIncomingCall();
+  }, [acceptIncomingCall, autoAcceptIncomingCall, callStatus, incomingCall, socket]);
 
   useEffect(() => {
     if (!socket || !conversationId) return;
@@ -615,7 +736,7 @@ export default function ChatDetailsPage() {
       if (payload.signalType === "answer") {
         if (!peerRef.current) return;
         await peerRef.current.setRemoteDescription(
-          new RTCSessionDescription(payload.signal as RTCSessionDescriptionInit)
+          new RTCSessionDescription(payload.signal as NativeRTCSessionDescriptionInit)
         );
         setCallStatus("active");
         setCallStartedAt(Date.now());
@@ -624,7 +745,13 @@ export default function ChatDetailsPage() {
       }
 
       if (payload.signalType === "candidate") {
-        if (!peerRef.current) return;
+        if (!peerRef.current) {
+          pendingIceCandidatesRef.current = [
+            ...pendingIceCandidatesRef.current,
+            payload.signal as RTCIceCandidateInit,
+          ];
+          return;
+        }
         try {
           await peerRef.current.addIceCandidate(
             new RTCIceCandidate(payload.signal as RTCIceCandidateInit)
@@ -640,11 +767,11 @@ export default function ChatDetailsPage() {
           ...(current || {
             conversationId: payload.conversationId,
             senderId: payload.senderId,
-            senderName: typeof name === "string" ? name : "User",
+            senderName: displayName,
             senderAvatar: displayAvatar,
             callType: payload.callType || "voice",
           }),
-          offer: payload.signal as RTCSessionDescriptionInit,
+          offer: payload.signal as NativeRTCSessionDescriptionInit,
         }));
       }
     };
@@ -681,7 +808,7 @@ export default function ChatDetailsPage() {
       socket.off("call:end", handleEnd);
       socket.off("call:blocked", handleBlocked);
     };
-  }, [canStartCalls, conversationId, displayAvatar, incomingCall?.conversationId, name, resetCallState, socket, targetUserId]);
+  }, [canStartCalls, conversationId, displayAvatar, displayName, incomingCall?.conversationId, resetCallState, socket, targetUserId]);
 
   const handlePickAttachments = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -857,10 +984,10 @@ export default function ChatDetailsPage() {
             <ProfileAvatar uri={displayAvatar} size={52} iconSize={24} className="mr-4" />
             <View className="flex-1">
               <Text className="text-[20px] font-bold text-[#2286BE]" numberOfLines={1}>
-                {name}
+                {displayName}
               </Text>
               <Text className="text-[14px] font-medium text-[#7C8B95] mt-1" numberOfLines={1}>
-                {info}
+                {displayInfo}
               </Text>
             </View>
           </View>
@@ -1229,7 +1356,102 @@ export default function ChatDetailsPage() {
           cleanupCall(true);
         }}
       >
-        <View className="flex-1 bg-[#06131D]/90 px-5 py-8 justify-center">
+        <View className={`${isVideoCall ? "flex-1 bg-black" : "flex-1 bg-[#06131D]/90 px-5 py-8 justify-center"}`}>
+          {remoteStreamUrl && !isVideoCall ? (
+            <RTCView
+              streamURL={remoteStreamUrl}
+              objectFit="cover"
+              style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
+            />
+          ) : null}
+          {localStreamUrl && !isVideoCall ? (
+            <RTCView
+              streamURL={localStreamUrl}
+              objectFit="cover"
+              mirror
+              style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
+            />
+          ) : null}
+          {isVideoCall ? (
+            <View className="flex-1 bg-black">
+              {remoteStreamUrl ? (
+                <RTCView
+                  streamURL={remoteStreamUrl}
+                  objectFit="cover"
+                  style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+                />
+              ) : (
+                <View
+                  className="items-center justify-center bg-[#08131B] px-8"
+                  style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+                >
+                  <ProfileAvatar
+                    uri={incomingCall?.senderAvatar || displayAvatar}
+                    size={108}
+                    iconSize={44}
+                    className="mb-5"
+                  />
+                  <Text className="text-white text-[24px] font-bold text-center">{callTitle}</Text>
+                  <Text className="text-white/65 text-[14px] mt-2 text-center">
+                    {callStatus === "ringing" ? "Waiting for the other person to respond." : "Setting up video."}
+                  </Text>
+                </View>
+              )}
+
+              <View className="absolute left-5 right-5 top-12 flex-row items-start justify-between">
+                <View className="flex-1 pr-4">
+                  <Text className="text-white text-[24px] font-bold" numberOfLines={1}>
+                    {callTitle}
+                  </Text>
+                  <Text className="text-white/80 text-[14px] font-medium mt-2">
+                    Video call{" "}
+                    {callStatus === "active"
+                      ? `live • ${callDurationLabel}`
+                      : callStatus === "ringing"
+                        ? "ringing"
+                        : "connecting"}
+                  </Text>
+                </View>
+                {localStreamUrl ? (
+                  <View className="w-[112px] h-[158px] overflow-hidden rounded-[22px] border-2 border-white/60 bg-[#0F172A]">
+                    <RTCView streamURL={localStreamUrl} className="w-full h-full" objectFit="cover" mirror />
+                  </View>
+                ) : null}
+              </View>
+
+              {callError ? (
+                <View className="absolute left-5 right-5 bottom-28 rounded-[18px] border border-red-200 bg-red-50 px-4 py-3">
+                  <Text className="text-red-700 font-bold">{callError}</Text>
+                </View>
+              ) : null}
+
+              <View className="absolute bottom-10 left-0 right-0 flex-row items-center justify-center">
+                {incomingCall && callStatus === "ringing" ? (
+                  <>
+                    <TouchableOpacity
+                      onPress={() => void acceptIncomingCall()}
+                      className="bg-[#18A957] px-7 py-4 rounded-full mr-4"
+                    >
+                      <Text className="text-white font-bold text-[16px]">Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={declineIncomingCall}
+                      className="bg-[#E11D48] px-7 py-4 rounded-full"
+                    >
+                      <Text className="text-white font-bold text-[16px]">Decline</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => cleanupCall(true)}
+                    className="bg-[#E11D48] px-9 py-4 rounded-full"
+                  >
+                    <Text className="text-white font-bold text-[16px]">End Call</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          ) : (
           <View className="bg-white rounded-[34px] overflow-hidden">
             <View className="px-6 pt-6 pb-5 bg-[#2286BE]">
               <View className="flex-row items-start justify-between">
@@ -1367,6 +1589,7 @@ export default function ChatDetailsPage() {
               </View>
             </View>
           </View>
+          )}
         </View>
       </Modal>
       </View>

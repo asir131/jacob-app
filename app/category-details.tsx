@@ -27,7 +27,7 @@ export default function CategoryDetailsPage() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
-      <View className="px-6 py-4 flex-row items-center bg-white shadow-sm shadow-black/5 z-10">
+      <View className="px-6 py-4 flex-row items-center bg-white z-10 border-b border-gray-100">
         <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center bg-gray-50 rounded-full mr-4">
           <Ionicons name="arrow-back" size={20} color="#1A2C42" />
         </TouchableOpacity>
@@ -55,7 +55,7 @@ export default function CategoryDetailsPage() {
             <TouchableOpacity
               key={service.id}
               onPress={() => router.push({ pathname: "/service-details", params: { id: service.id } })}
-              className="bg-white rounded-[24px] p-4 border border-gray-100 shadow-sm shadow-black/5 mb-4"
+              className="bg-white rounded-[24px] p-4 border border-gray-100 mb-4"
             >
               <View className="flex-row">
                 <View className="w-[110px] h-[96px] rounded-[18px] overflow-hidden bg-gray-100 mr-4">
@@ -92,7 +92,7 @@ export default function CategoryDetailsPage() {
             </TouchableOpacity>
           ))
         ) : (
-          <View className="bg-white rounded-[24px] p-8 border border-gray-100 shadow-sm shadow-black/5 items-center">
+          <View className="bg-white rounded-[24px] p-8 border border-gray-100 items-center">
             <Ionicons name="grid-outline" size={34} color="#94A3B8" />
             <Text className="text-[18px] font-bold text-[#1A2C42] mt-4">No services yet</Text>
             <Text className="text-center text-[14px] text-[#7C8B95] mt-2">

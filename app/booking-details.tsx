@@ -561,7 +561,7 @@ export default function BookingDetailsPage() {
           <View className="bg-[#1A2C42] rounded-[28px] p-6">
             <Text className="text-white/65 text-[12px] font-bold tracking-[0.18em] uppercase">Price Summary</Text>
             <Text className="text-white text-[34px] font-black mt-3">{formatCurrency(order.paymentAmount || order.packagePrice)}</Text>
-            <Text className="text-white/75 text-[14px] mt-1">Includes service charge and platform fee.</Text>
+            <Text className="text-white/75 text-[14px] mt-1">Final customer price.</Text>
           </View>
         </View>
 
@@ -644,12 +644,8 @@ export default function BookingDetailsPage() {
           <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-2">Price Details</Text>
           <View className="bg-white rounded-[24px] p-6 border border-gray-100 shadow-sm shadow-black/5">
             <View className="flex-row justify-between mb-4">
-              <Text className="text-[15px] font-medium text-[#7C8B95]">Service Charge</Text>
+              <Text className="text-[15px] font-medium text-[#7C8B95]">Service Price</Text>
               <Text className="text-[16px] font-bold text-[#1A2C42]">{formatCurrency(order.packagePrice)}</Text>
-            </View>
-            <View className="flex-row justify-between mb-4">
-              <Text className="text-[15px] font-medium text-[#7C8B95]">Platform Fee</Text>
-              <Text className="text-[16px] font-bold text-[#1A2C42]">{formatCurrency(order.paymentAmount ? order.paymentAmount - order.packagePrice : 0)}</Text>
             </View>
             <View className="h-[1px] bg-gray-100 my-2" />
             <View className="flex-row justify-between mt-2">

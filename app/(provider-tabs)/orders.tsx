@@ -407,11 +407,18 @@ export default function ProviderOrders() {
                       <Text className="text-[15px] font-bold text-[#1A2C42] mt-2">{order.client.name}</Text>
                     </View>
                     <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
-                      <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Amount</Text>
+                      <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Customer Pays</Text>
                       <Text className="text-[18px] font-black text-[#1A2C42] mt-2">
                         {formatCurrency(order.paymentAmount || order.packagePrice)}
                       </Text>
                     </View>
+                  </View>
+
+                  <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mt-4">
+                    <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Your Net Earning</Text>
+                      <Text className="text-[18px] font-black text-[#1A2C42] mt-2">
+                        {formatCurrency(order.providerEarningsAmount || order.packagePrice)}
+                      </Text>
                   </View>
 
                   <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mt-4">

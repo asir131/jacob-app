@@ -24,16 +24,18 @@ import type { OrderSummary, ServiceRequestSummary } from "@/src/types/api";
 
 const orderTabs = [
   { id: "all", label: "All" },
+  { id: "active", label: "Active" },
   { id: "pending", label: "Pending" },
   { id: "in-progress", label: "In Progress" },
   { id: "payment-pending", label: "Payment Pending" },
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },
-  { id: "requested", label: "Requested" },
+  { id: "requested", label: "Requested Orders" },
 ];
 
 const statusParamMap: Record<string, string> = {
   all: "all",
+  active: "active",
   pending: "pending",
   "in-progress": "accepted",
   "payment-pending": "payment_pending",
@@ -115,7 +117,7 @@ export default function BookingPage() {
   } = useGetClientOrdersQuery(
     {
       page,
-      limit: 8,
+      limit: 5,
       status: orderStatus,
       search,
     },
@@ -135,7 +137,7 @@ export default function BookingPage() {
     useGetClientServiceRequestsQuery(
       {
         page: requestedPage,
-        limit: 8,
+        limit: 5,
         status: "all",
         search,
       },
@@ -170,13 +172,25 @@ export default function BookingPage() {
     };
   }, [refetchOrders, refetchRequests, socket]);
 
-  const orders = useMemo(() => ((ordersData?.data.items || []) as OrderSummary[]), [ordersData?.data.items]);
+  const sortLatestFirst = <T extends { createdAt?: string | null; id?: string; orderNumber?: string }>(items: T[]) =>
+    [...items].sort((left, right) => {
+      const leftTime = new Date(left.createdAt || 0).getTime();
+      const rightTime = new Date(right.createdAt || 0).getTime();
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return String(right.orderNumber || right.id || "").localeCompare(String(left.orderNumber || left.id || ""));
+    });
+
+  const orders = useMemo(
+    () => sortLatestFirst((ordersData?.data.items || []) as OrderSummary[]),
+    [ordersData?.data.items]
+  );
   const requests = useMemo(
-    () => ((requestsData?.data.items || []) as ServiceRequestSummary[]),
+    () => sortLatestFirst((requestsData?.data.items || []) as ServiceRequestSummary[]),
     [requestsData?.data.items]
   );
   const filteredOrders = useMemo(() => {
     if (activeTab === "all") return orders;
+    if (activeTab === "active") return orders;
     if (activeTab === "requested") return [];
     if (activeTab === "pending") return orders.filter((item) => item.status === "pending");
     if (activeTab === "in-progress") return orders.filter((item) => item.status === "accepted");
@@ -190,7 +204,17 @@ export default function BookingPage() {
     () => ({
       total: ordersData?.data.pagination?.totalItems || 0,
       pending: orders.filter((item) => item.status === "pending").length,
-      active: orders.filter((item) => item.status === "accepted").length,
+      active: orders.filter((item) =>
+        [
+          "pending",
+          "accepted",
+          "accepting_delivery",
+          "revision_requested",
+          "under_revision",
+          "after_sell_revision_requested",
+          "under_after_sell_revision",
+        ].includes(item.status)
+      ).length,
       completed: orders.filter((item) => item.status === "completed").length,
     }),
     [orders, ordersData?.data.pagination?.totalItems]
@@ -352,45 +376,6 @@ export default function BookingPage() {
           </View>
         ) : (
           <View className="px-6">
-            {requests.length ? (
-              <View className="mb-6">
-                <View className="flex-row items-center justify-between mb-4">
-                  <View>
-                    <Text className="text-[18px] font-black text-[#1A2C42]">Requested Orders</Text>
-                    <Text className="text-[13px] text-[#7C8B95] mt-1">
-                      Custom requests are visible here too for easier management.
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setActiveTab("requested")} className="px-4 py-2 rounded-full bg-[#EAF3FA]">
-                    <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#2286BE]">View All</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {requests.map((item) => (
-                  <RequestedOrderCard
-                    key={`manage-${item.id}`}
-                    item={item}
-                    onOpenPostRequest={() => router.push("/post-request")}
-                    onOpenRequestOrOrder={(request) => {
-                      const linkedOrderParam = resolveLinkedOrderParam(request.linkedOrderId, request.linkedOrderNumber);
-                      if (linkedOrderParam) {
-                        router.push({
-                          pathname: "/booking-details",
-                          params: {
-                            id: linkedOrderParam,
-                            role: "client",
-                          },
-                        });
-                        return;
-                      }
-
-                      router.push("/client-requests");
-                    }}
-                  />
-                ))}
-              </View>
-            ) : null}
-
             {filteredOrders.length ? (
               filteredOrders.map((item) => (
                 <TouchableOpacity

@@ -256,7 +256,12 @@ export type OrderSummary = {
   specialInstructions?: string;
   paymentStatus?: string;
   paymentAmount?: number;
+  platformFeeAmount?: number;
   providerEarningsAmount?: number;
+  listedPrice?: number;
+  customerPaidAmount?: number;
+  adminFeeAmount?: number;
+  providerNetAmount?: number;
   deliveryImages?: string[];
   deliveryNote?: string;
   revisionRequestNote?: string;
