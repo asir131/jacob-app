@@ -95,6 +95,7 @@ export type CategoryItem = {
 
 export type PublicServiceCard = {
   id: string;
+  slug?: string;
   title: string;
   categorySlug: string;
   categoryName: string;

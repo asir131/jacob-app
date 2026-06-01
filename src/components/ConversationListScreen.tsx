@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
@@ -43,6 +44,15 @@ const getQueryErrorMessage = (error: unknown, fallback: string) => {
 
 export function ConversationListScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    conversationId?: string;
+    name?: string;
+    avatar?: string;
+    info?: string;
+    blockedBy?: string;
+    targetUserId?: string;
+    targetUserRole?: string;
+  }>();
   const { socket } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
@@ -53,6 +63,38 @@ export function ConversationListScreen() {
     refetchOnReconnect: true,
     pollingInterval: 15000,
   });
+
+  const readParam = (value?: string | string[]) => {
+    if (Array.isArray(value)) return value[0] || "";
+    return value || "";
+  };
+
+  useEffect(() => {
+    const conversationId = readParam(params.conversationId);
+    if (!conversationId) return;
+
+    router.replace({
+      pathname: "/chat-details",
+      params: {
+        conversationId,
+        name: readParam(params.name),
+        avatar: readParam(params.avatar),
+        info: readParam(params.info),
+        blockedBy: readParam(params.blockedBy),
+        targetUserId: readParam(params.targetUserId),
+        targetUserRole: readParam(params.targetUserRole),
+      },
+    });
+  }, [
+    params.avatar,
+    params.blockedBy,
+    params.conversationId,
+    params.info,
+    params.name,
+    params.targetUserId,
+    params.targetUserRole,
+    router,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,7 +150,10 @@ export function ConversationListScreen() {
   const errorMessage = getQueryErrorMessage(error, "We could not load your conversations.");
 
   return (
-    <View className="flex-1 bg-white">
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      className="flex-1 bg-white"
+    >
       <SafeAreaView
         edges={["top"]}
         style={{
@@ -244,6 +289,6 @@ export function ConversationListScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }

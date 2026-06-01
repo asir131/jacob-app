@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { mobileApi } from "@/src/lib/api";
 

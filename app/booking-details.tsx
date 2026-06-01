@@ -20,6 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency, formatDateLabel, formatStatusLabel, formatTimeLabel } from "@/src/lib/formatters";
 import {
@@ -975,7 +976,13 @@ function BottomSheet({
             <Ionicons name="close" size={20} color="#1A2C42" />
           </TouchableOpacity>
         </View>
-        {children}
+        <KeyboardAwareScrollView
+          showsVerticalScrollIndicator={false}
+          className="max-h-[60vh]"
+          contentContainerStyle={{ paddingBottom: 4 }}
+        >
+          {children}
+        </KeyboardAwareScrollView>
       </View>
     </View>
   );

@@ -5,13 +5,14 @@ import { useState } from "react";
 import {
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 
 export default function ResetPasswordScreen() {
     const router = useRouter();

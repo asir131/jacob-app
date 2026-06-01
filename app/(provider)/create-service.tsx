@@ -10,7 +10,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -19,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { resolveAddressFromCoordinates } from "@/src/lib/geocode";
 import type { CategoryItem } from "@/src/types/api";

@@ -36,6 +36,19 @@ type Paginated<T> = {
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
+  responseHandler: async (response) => {
+    const text = await response.text();
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        message: `Server returned a non-JSON response from ${response.url}. Check EXPO_PUBLIC_API_URL and make sure the backend is running.`,
+      };
+    }
+  },
   prepareHeaders: async (headers) => {
     const token = await authStorage.getAccessToken();
     headers.set("Accept", "application/json");
@@ -392,6 +405,17 @@ export const apiSlice = createApi({
       query: (orderId) => ({
         url: `/api/chats/conversations/order/${orderId}`,
         method: "POST",
+      }),
+      invalidatesTags: ["Chats"],
+    }),
+    startProviderConversation: builder.mutation<
+      ApiEnvelope<{ conversation: ConversationSummary }>,
+      { providerId: string; gigId: string }
+    >({
+      query: (payload) => ({
+        url: "/api/chats/conversations/provider/start",
+        method: "POST",
+        body: payload,
       }),
       invalidatesTags: ["Chats"],
     }),
@@ -788,6 +812,7 @@ export const {
   useFinalizeClientOrderMutation,
   useGetConversationsQuery,
   useEnsureConversationByOrderMutation,
+  useStartProviderConversationMutation,
   useStartCustomOrderConversationMutation,
   useStartRepeatOrderConversationMutation,
   useGetConversationMessagesQuery,

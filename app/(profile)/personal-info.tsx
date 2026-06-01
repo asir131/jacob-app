@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { resolveAddressFromCoordinates } from "@/src/lib/geocode";
@@ -211,7 +211,7 @@ export default function PersonalInfoPage() {
     }
   };
 
-  const InputRow = ({
+  const renderInputRow = ({
     label,
     value,
     icon,
@@ -230,10 +230,10 @@ export default function PersonalInfoPage() {
   }) => (
     <View className="mb-5">
       <Text className="text-[14px] font-bold text-[#7C8B95] mb-2 ml-1">{label}</Text>
-      <View className="flex-row items-start bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm shadow-gray-100">
-        <Ionicons name={icon} size={20} color="#A0AEC0" style={{ marginTop: multiline ? 4 : 0 }} />
+      <View className={`flex-row ${multiline ? "items-start" : "items-center"} bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm shadow-gray-100`}>
+        <Ionicons name={icon} size={20} color="#A0AEC0" style={{ marginTop: multiline ? 3 : 0 }} />
         <TextInput
-          className={`flex-1 ml-3 text-[16px] font-semibold text-[#1A2C42] ${multiline ? "min-h-[96px]" : ""}`}
+          className={`flex-1 ml-3 text-[16px] font-semibold text-[#1A2C42] ${multiline ? "min-h-[96px] py-0" : "h-8 py-0"}`}
           value={value}
           editable={editable}
           keyboardType={keyboardType}
@@ -304,15 +304,39 @@ export default function PersonalInfoPage() {
           </View>
         </View>
 
-        <InputRow label="First Name" value={form.firstName} icon="person-outline" field="firstName" />
-        <InputRow label="Last Name" value={form.lastName} icon="person-outline" field="lastName" />
-        <InputRow label="Email Address" value={form.email} icon="mail-outline" field="email" editable={false} keyboardType="email-address" />
-        <InputRow label="Phone Number" value={form.phone} icon="call-outline" field="phone" keyboardType="phone-pad" />
+        {renderInputRow({ label: "First Name", value: form.firstName, icon: "person-outline", field: "firstName" })}
+        {renderInputRow({ label: "Last Name", value: form.lastName, icon: "person-outline", field: "lastName" })}
+        {renderInputRow({
+          label: "Email Address",
+          value: form.email,
+          icon: "mail-outline",
+          field: "email",
+          editable: false,
+          keyboardType: "email-address",
+        })}
+        {renderInputRow({
+          label: "Phone Number",
+          value: form.phone,
+          icon: "call-outline",
+          field: "phone",
+          keyboardType: "phone-pad",
+        })}
 
         {isProvider ? (
           <>
-            <InputRow label="Business Bio" value={form.businessBio} icon="briefcase-outline" field="businessBio" multiline />
-            <InputRow label="Experience Level" value={form.experienceLevel} icon="ribbon-outline" field="experienceLevel" />
+            {renderInputRow({
+              label: "Business Bio",
+              value: form.businessBio,
+              icon: "briefcase-outline",
+              field: "businessBio",
+              multiline: true,
+            })}
+            {renderInputRow({
+              label: "Experience Level",
+              value: form.experienceLevel,
+              icon: "ribbon-outline",
+              field: "experienceLevel",
+            })}
           </>
         ) : null}
 
@@ -350,7 +374,7 @@ export default function PersonalInfoPage() {
           <View className="flex-row items-center bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm shadow-gray-100 mb-4">
             <Ionicons name="location-outline" size={20} color="#A0AEC0" />
             <TextInput
-              className="flex-1 ml-3 text-[16px] font-semibold text-[#1A2C42]"
+              className="flex-1 ml-3 h-8 py-0 text-[16px] font-semibold text-[#1A2C42]"
               value={isProvider ? form.serviceCity : form.address}
               onChangeText={(text) => updateField(isProvider ? "serviceCity" : "address", text)}
             />
@@ -376,7 +400,12 @@ export default function PersonalInfoPage() {
         </View>
 
         {!isProvider ? (
-          <InputRow label="Preferred Language" value={form.preferredLanguage} icon="language-outline" field="preferredLanguage" />
+          renderInputRow({
+            label: "Preferred Language",
+            value: form.preferredLanguage,
+            icon: "language-outline",
+            field: "preferredLanguage",
+          })
         ) : null}
 
         {isProvider ? (

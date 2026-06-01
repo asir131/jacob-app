@@ -2,13 +2,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import {
@@ -108,8 +111,17 @@ export default function WebsiteReviewPrompt() {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+      >
       <View className="flex-1 items-center justify-center bg-black/50 px-5">
-        <View className="w-full max-w-[420px] rounded-[28px] bg-white p-6">
+        <KeyboardAwareScrollView
+          className="w-full max-w-[420px] rounded-[28px] bg-white"
+          contentContainerStyle={{ padding: 24 }}
+          showsVerticalScrollIndicator={false}
+          keyboardGap={24}
+        >
           <Text className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#2286BE]">
             Website Review
           </Text>
@@ -162,8 +174,9 @@ export default function WebsiteReviewPrompt() {
               <Text className="text-[15px] font-bold text-[#1A2C42]">Remind Me Later</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAwareScrollView>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

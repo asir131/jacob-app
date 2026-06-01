@@ -3,8 +3,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -12,8 +12,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { formatCurrency } from "@/src/lib/formatters";
+import {
+  SchedulePickerFields,
+  isFutureSchedule,
+  toDateInputValue,
+} from "@/src/components/SchedulePickerFields";
 import {
   useCreateOrderMutation,
   useGetPublicServiceByIdQuery,
@@ -30,8 +36,8 @@ export default function BookServicePage() {
   const [createOrder, { isLoading: creatingOrder }] = useCreateOrderMutation();
   const [step, setStep] = useState(1);
   const [selectedPackage, setSelectedPackage] = useState(0);
-  const [scheduledDate, setScheduledDate] = useState(tomorrow.toISOString().slice(0, 10));
-  const [scheduledTime, setScheduledTime] = useState("10:00 AM");
+  const [scheduledDate, setScheduledDate] = useState(toDateInputValue(tomorrow));
+  const [scheduledTime, setScheduledTime] = useState("10:00");
   const [serviceAddress, setServiceAddress] = useState(user?.address || "");
   const [specialInstructions, setSpecialInstructions] = useState("");
 
@@ -51,6 +57,10 @@ export default function BookServicePage() {
 
     if (step === 2) {
       if (!scheduledDate.trim() || !scheduledTime.trim()) return;
+      if (!isFutureSchedule(scheduledDate, scheduledTime)) {
+        Alert.alert("Invalid schedule", "Please select a future preferred date and time.");
+        return;
+      }
       setStep(3);
       return;
     }
@@ -166,10 +176,15 @@ export default function BookServicePage() {
             <Text className="text-[26px] font-black text-[#1A2C42] mb-2">Select date and time</Text>
             <Text className="text-[14px] text-[#7C8B95] mb-6">Tell us when you want the professional to arrive.</Text>
             <View className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm shadow-black/5">
-              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2">Preferred Date</Text>
-              <TextInput value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-5" />
-              <Text className="text-[14px] font-bold text-[#1A2C42] mb-2">Preferred Time</Text>
-              <TextInput value={scheduledTime} onChangeText={setScheduledTime} placeholder="10:00 AM" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px]" />
+              <SchedulePickerFields
+                dateValue={scheduledDate}
+                timeValue={scheduledTime}
+                onDateChange={setScheduledDate}
+                onTimeChange={setScheduledTime}
+                className="flex-row mb-0"
+                inputClassName="bg-[#F8FAFC]"
+                labelClassName="text-[14px] font-bold text-[#1A2C42] mb-2"
+              />
             </View>
           </View>
         ) : null}

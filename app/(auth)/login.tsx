@@ -4,11 +4,6 @@ import { ApiError } from "@/src/lib/api";
 import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from "@/src/lib/env";
 import { useLoginWithGoogleMutation } from "@/src/store/services/apiSlice";
 import { Ionicons } from "@expo/vector-icons";
-import {
-    GoogleSignin,
-    isErrorWithCode,
-    statusCodes,
-} from "@react-native-google-signin/google-signin";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -18,8 +13,8 @@ import {
     Image,
     Keyboard,
     KeyboardAvoidingView,
+    NativeModules,
     Platform,
-    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
@@ -27,6 +22,43 @@ import {
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
+
+type GoogleSigninModule = {
+    GoogleSignin: {
+        configure: (options: {
+            webClientId: string;
+            iosClientId?: string;
+            offlineAccess?: boolean;
+            forceCodeForRefreshToken?: boolean;
+        }) => void;
+        hasPlayServices: (options?: { showPlayServicesUpdateDialog?: boolean }) => Promise<boolean>;
+        signIn: () => Promise<{ data?: { idToken?: string | null } }>;
+    };
+    isErrorWithCode: (error: unknown) => error is { code?: string };
+    statusCodes: {
+        SIGN_IN_CANCELLED: string;
+    };
+};
+
+let cachedGoogleSignin: GoogleSigninModule | null | undefined;
+
+const getGoogleSignin = () => {
+    if (cachedGoogleSignin !== undefined) return cachedGoogleSignin;
+    if (!NativeModules.RNGoogleSignin) {
+        cachedGoogleSignin = null;
+        return cachedGoogleSignin;
+    }
+    try {
+        // Google Sign-In is a native module; keep email login usable when this dev build does not include it.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        cachedGoogleSignin = require("@react-native-google-signin/google-signin") as GoogleSigninModule;
+    } catch {
+        cachedGoogleSignin = null;
+    }
+    return cachedGoogleSignin;
+};
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -43,7 +75,8 @@ export default function LoginScreen() {
 
     useEffect(() => {
         if (!GOOGLE_WEB_CLIENT_ID) return;
-        GoogleSignin.configure({
+        const googleSignin = getGoogleSignin();
+        googleSignin?.GoogleSignin.configure({
             webClientId: GOOGLE_WEB_CLIENT_ID,
             iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
             offlineAccess: false,
@@ -84,10 +117,19 @@ export default function LoginScreen() {
             return;
         }
 
+        const googleSignin = getGoogleSignin();
+        if (!googleSignin) {
+            Alert.alert(
+                "Google sign in unavailable",
+                "This app build does not include the Google Sign-In native module. Rebuild the development app to use Google login."
+            );
+            return;
+        }
+
         setGoogleLoading(true);
         try {
-            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-            const googleUser = await GoogleSignin.signIn();
+            await googleSignin.GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+            const googleUser = await googleSignin.GoogleSignin.signIn();
             const idToken = googleUser.data?.idToken;
 
             if (!idToken) {
@@ -99,7 +141,7 @@ export default function LoginScreen() {
             await setSession(payload.data, { persistent: rememberMe });
             router.replace(payload.data.user.role === "provider" ? "/(provider-tabs)" : "/(tabs)");
         } catch (error) {
-            if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
+            if (googleSignin.isErrorWithCode(error) && error.code === googleSignin.statusCodes.SIGN_IN_CANCELLED) {
                 return;
             }
             Alert.alert("Google sign in failed", getGoogleErrorMessage(error));

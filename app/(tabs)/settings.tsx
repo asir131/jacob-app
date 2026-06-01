@@ -10,6 +10,9 @@ export default function SettingsPage() {
     const { setRole, user, logout } = useAuth();
     const insets = useSafeAreaInsets();
     const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
+    const canSwitchToSelling =
+        user?.role === "provider" ||
+        Boolean(user?.businessBio || user?.experienceLevel || user?.serviceCity || user?.serviceLocationLat || user?.serviceLocationLng);
 
     const SettingsRow = ({ icon, label, type = 'chevron', color = '#1A2C42', value = null, onChange = null, isDestructive = false, route = null, onPress = null }: any) => (
         <TouchableOpacity
@@ -88,16 +91,20 @@ export default function SettingsPage() {
                         Quick Navigation
                     </Text>
                     <View className="bg-white rounded-[24px] px-5 py-2 border border-gray-100 shadow-sm shadow-gray-100">
-                        <SettingsRow
-                            icon="swap-horizontal-outline"
-                            label="Switch to Selling"
-                            color="#2B84B1"
-                            onPress={async () => {
-                                await setRole("provider");
-                                router.replace("/(provider-tabs)");
-                            }}
-                        />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        {canSwitchToSelling ? (
+                            <>
+                                <SettingsRow
+                                    icon="swap-horizontal-outline"
+                                    label="Switch to Selling"
+                                    color="#2B84B1"
+                                    onPress={async () => {
+                                        await setRole("provider");
+                                        router.replace("/(provider-tabs)");
+                                    }}
+                                />
+                                <View className="h-[1px] bg-gray-100 ml-14" />
+                            </>
+                        ) : null}
                         <SettingsRow icon="grid-outline" label="Dashboard" color="#2B84B1" route="/(tabs)" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="briefcase-outline" label="My Orders" color="#2B84B1" route="/(tabs)/booking" />

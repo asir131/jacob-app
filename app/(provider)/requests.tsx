@@ -6,7 +6,6 @@ import {
   Alert,
   Image,
   RefreshControl,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
 import { formatMilesFromKm } from "@/src/lib/distance";

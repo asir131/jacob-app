@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -12,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { formatMilesFromKm, milesToKm } from "@/src/lib/distance";
 import { formatCurrency } from "@/src/lib/formatters";

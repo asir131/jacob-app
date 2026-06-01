@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Linking,
   Modal,
+  NativeModules,
   PermissionsAndroid,
   Platform,
   ScrollView,
@@ -20,19 +21,15 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import {
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-  RTCView,
-  type MediaStream,
-  mediaDevices,
-  registerGlobals,
-} from "react-native-webrtc";
-import type { RTCSessionDescriptionInit as NativeRTCSessionDescriptionInit } from "react-native-webrtc/lib/typescript/RTCSessionDescription";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import InCallManager from "react-native-incall-manager";
 
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
+import {
+  SchedulePickerFields,
+  isFutureSchedule,
+  toScheduleTimeLabel,
+} from "@/src/components/SchedulePickerFields";
 import { useAuth } from "@/src/contexts/AuthContext";
 import {
   PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY,
@@ -53,7 +50,39 @@ import {
 } from "@/src/store/services/apiSlice";
 import type { ChatMessage, ConversationSummary } from "@/src/types/api";
 
-registerGlobals();
+type NativeRTCSessionDescriptionInit = Record<string, unknown>;
+type NativeRTCIceCandidateInit = Record<string, unknown>;
+type NativeMediaStream = {
+  getTracks: () => { enabled: boolean; kind?: string; stop: () => void }[];
+  getAudioTracks: () => { enabled: boolean; stop: () => void }[];
+  getVideoTracks: () => { enabled: boolean; stop: () => void }[];
+  toURL: () => string;
+};
+type NativePeerConnection = any;
+
+let cachedWebRTC: any | null | undefined;
+
+const getWebRTC = () => {
+  if (cachedWebRTC !== undefined) return cachedWebRTC;
+  try {
+    // WebRTC is optional in local Expo runs; load it only when calls are used.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const loaded = require("react-native-webrtc");
+    loaded?.registerGlobals?.();
+    cachedWebRTC = loaded;
+  } catch {
+    cachedWebRTC = null;
+  }
+  return cachedWebRTC;
+};
+
+const getWebRTCOrThrow = () => {
+  const webRTC = getWebRTC();
+  if (!webRTC) {
+    throw new Error("Voice and video calls require a development build with WebRTC installed.");
+  }
+  return webRTC;
+};
 
 type AttachmentAsset = {
   uri: string;
@@ -80,7 +109,7 @@ type CallSignalPayload = {
   targetUserId?: string;
   senderId?: string;
   signalType?: "offer" | "answer" | "candidate";
-  signal?: NativeRTCSessionDescriptionInit | RTCIceCandidateInit;
+  signal?: NativeRTCSessionDescriptionInit | NativeRTCIceCandidateInit;
   callType?: CallType;
 };
 
@@ -90,10 +119,12 @@ type ActiveCallRef = {
   callType: CallType;
 };
 
-const createPeerConnection = () =>
-  new RTCPeerConnection({
+const createPeerConnection = () => {
+  const webRTC = getWebRTCOrThrow();
+  return new webRTC.RTCPeerConnection({
     iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
   });
+};
 
 const formatCallDuration = (totalSeconds: number) => {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds));
@@ -102,7 +133,16 @@ const formatCallDuration = (totalSeconds: number) => {
   return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 };
 
-const safeInCallManager = InCallManager && typeof InCallManager === "object" ? InCallManager : null;
+const safeInCallManager =
+  NativeModules.InCallManager && InCallManager && typeof InCallManager === "object" ? InCallManager : null;
+
+const callInCallManager = (action: () => void) => {
+  try {
+    action();
+  } catch {
+    // In local Expo/dev builds the native InCallManager module may be absent.
+  }
+};
 
 const ProfileAvatar = ({
   uri,
@@ -135,6 +175,27 @@ const ProfileAvatar = ({
   );
 };
 
+const WebRTCVideoView = ({
+  streamURL,
+  className = "",
+  objectFit = "cover",
+  mirror = false,
+  style,
+}: {
+  streamURL: string;
+  className?: string;
+  objectFit?: "cover" | "contain";
+  mirror?: boolean;
+  style?: object;
+}) => {
+  const RTCView = getWebRTC()?.RTCView;
+  if (!RTCView) {
+    return <View className={className} style={style} />;
+  }
+
+  return <RTCView streamURL={streamURL} className={className} objectFit={objectFit} mirror={mirror} style={style} />;
+};
+
 export default function ChatDetailsPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -161,11 +222,11 @@ export default function ChatDetailsPage() {
   };
 
   const scrollViewRef = useRef<ScrollView>(null);
-  const peerRef = useRef<RTCPeerConnection | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const peerRef = useRef<NativePeerConnection | null>(null);
+  const localStreamRef = useRef<NativeMediaStream | null>(null);
+  const remoteStreamRef = useRef<NativeMediaStream | null>(null);
   const activeCallRef = useRef<ActiveCallRef | null>(null);
-  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const pendingIceCandidatesRef = useRef<NativeRTCIceCandidateInit[]>([]);
   const pendingIncomingCallLoadedRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -181,6 +242,7 @@ export default function ChatDetailsPage() {
   const [proposalAddress, setProposalAddress] = useState("");
   const [proposalDate, setProposalDate] = useState("");
   const [proposalTime, setProposalTime] = useState("");
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const [activeCall, setActiveCall] = useState<CallType | null>(null);
   const [incomingCall, setIncomingCall] = useState<CallInvitePayload | null>(null);
@@ -281,7 +343,7 @@ export default function ChatDetailsPage() {
         const candidatesRaw = await AsyncStorage.getItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
         await AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
         try {
-          const parsedCandidates = candidatesRaw ? (JSON.parse(candidatesRaw) as RTCIceCandidateInit[]) : [];
+          const parsedCandidates = candidatesRaw ? (JSON.parse(candidatesRaw) as NativeRTCIceCandidateInit[]) : [];
           pendingIceCandidatesRef.current = Array.isArray(parsedCandidates) ? parsedCandidates : [];
         } catch {
           pendingIceCandidatesRef.current = [];
@@ -342,27 +404,49 @@ export default function ChatDetailsPage() {
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 120);
   }, [messages]);
 
-  const stopStream = useCallback((stream: MediaStream | null) => {
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      setIsKeyboardVisible(true);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 80);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const stopStream = useCallback((stream: NativeMediaStream | null) => {
     if (!stream) return;
     stream.getTracks().forEach((track) => track.stop());
   }, []);
 
   const startCallAudioRoute = useCallback((callType: CallType) => {
     if (!safeInCallManager) return;
-    safeInCallManager.start?.({ media: callType === "video" ? "video" : "audio" });
-    safeInCallManager.setKeepScreenOn?.(true);
-    safeInCallManager.setMicrophoneMute?.(false);
-    safeInCallManager.setForceSpeakerphoneOn?.(true);
-    safeInCallManager.setSpeakerphoneOn?.(true);
+    callInCallManager(() => {
+      safeInCallManager.start?.({ media: callType === "video" ? "video" : "audio" });
+      safeInCallManager.setKeepScreenOn?.(true);
+      safeInCallManager.setMicrophoneMute?.(false);
+      safeInCallManager.setForceSpeakerphoneOn?.(true);
+      safeInCallManager.setSpeakerphoneOn?.(true);
+    });
   }, []);
 
   const stopCallAudioRoute = useCallback(() => {
     if (!safeInCallManager) return;
-    safeInCallManager.setKeepScreenOn?.(false);
-    safeInCallManager.setMicrophoneMute?.(false);
-    safeInCallManager.setForceSpeakerphoneOn?.(false);
-    safeInCallManager.setSpeakerphoneOn?.(false);
-    safeInCallManager.stop?.();
+    callInCallManager(() => {
+      safeInCallManager.setKeepScreenOn?.(false);
+      safeInCallManager.setMicrophoneMute?.(false);
+      safeInCallManager.setForceSpeakerphoneOn?.(false);
+      safeInCallManager.setSpeakerphoneOn?.(false);
+      safeInCallManager.stop?.();
+    });
   }, []);
 
   const resetCallState = useCallback(() => {
@@ -385,14 +469,15 @@ export default function ChatDetailsPage() {
     setCallError("");
   }, [stopCallAudioRoute, stopStream]);
 
-  const flushPendingIceCandidates = useCallback(async (peer: RTCPeerConnection) => {
+  const flushPendingIceCandidates = useCallback(async (peer: NativePeerConnection) => {
     const candidates = pendingIceCandidatesRef.current;
     if (!candidates.length) return;
 
     pendingIceCandidatesRef.current = [];
     for (const candidate of candidates) {
       try {
-        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+        const webRTC = getWebRTCOrThrow();
+        await peer.addIceCandidate(new webRTC.RTCIceCandidate(candidate));
       } catch {
         // Ignore stale ICE candidates collected before the peer was ready.
       }
@@ -463,11 +548,11 @@ export default function ChatDetailsPage() {
   }, []);
 
   const attachPeerListeners = useCallback(
-    (peer: RTCPeerConnection, callType: CallType) => {
+    (peer: NativePeerConnection, callType: CallType) => {
       const peerWithEvents = peer as unknown as {
         addEventListener: (
           type: "track" | "icecandidate",
-          listener: (event: { streams?: MediaStream[]; track?: { enabled: boolean } | null; candidate?: RTCIceCandidate | null }) => void
+          listener: (event: { streams?: NativeMediaStream[]; track?: { enabled: boolean } | null; candidate?: any | null }) => void
         ) => void;
       };
 
@@ -506,7 +591,8 @@ export default function ChatDetailsPage() {
       }
 
       try {
-        return await mediaDevices.getUserMedia({
+        const webRTC = getWebRTCOrThrow();
+        return await webRTC.mediaDevices.getUserMedia({
           audio: true,
           video:
             callType === "video"
@@ -523,7 +609,7 @@ export default function ChatDetailsPage() {
     [requestCallPermissions]
   );
 
-  const prepareLocalStreamForCall = useCallback((stream: MediaStream, callType: CallType) => {
+  const prepareLocalStreamForCall = useCallback((stream: NativeMediaStream, callType: CallType) => {
     const audioTracks = stream.getAudioTracks();
     if (!audioTracks.length) {
       stopStream(stream);
@@ -542,7 +628,7 @@ export default function ChatDetailsPage() {
     return stream;
   }, [stopStream]);
 
-  const addLocalTracksToPeer = useCallback((peer: RTCPeerConnection, stream: MediaStream) => {
+  const addLocalTracksToPeer = useCallback((peer: NativePeerConnection, stream: NativeMediaStream) => {
     const audioTracks = stream.getAudioTracks();
     const otherTracks = stream.getTracks().filter((track) => track.kind !== "audio");
 
@@ -644,7 +730,8 @@ export default function ChatDetailsPage() {
       attachPeerListeners(peer, incomingCall.callType);
 
       if (incomingCall.offer) {
-        await peer.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        const webRTC = getWebRTCOrThrow();
+        await peer.setRemoteDescription(new webRTC.RTCSessionDescription(incomingCall.offer));
         await flushPendingIceCandidates(peer);
       }
 
@@ -735,8 +822,9 @@ export default function ChatDetailsPage() {
 
       if (payload.signalType === "answer") {
         if (!peerRef.current) return;
+        const webRTC = getWebRTCOrThrow();
         await peerRef.current.setRemoteDescription(
-          new RTCSessionDescription(payload.signal as NativeRTCSessionDescriptionInit)
+          new webRTC.RTCSessionDescription(payload.signal as NativeRTCSessionDescriptionInit)
         );
         setCallStatus("active");
         setCallStartedAt(Date.now());
@@ -748,13 +836,14 @@ export default function ChatDetailsPage() {
         if (!peerRef.current) {
           pendingIceCandidatesRef.current = [
             ...pendingIceCandidatesRef.current,
-            payload.signal as RTCIceCandidateInit,
+            payload.signal as NativeRTCIceCandidateInit,
           ];
           return;
         }
         try {
+          const webRTC = getWebRTCOrThrow();
           await peerRef.current.addIceCandidate(
-            new RTCIceCandidate(payload.signal as RTCIceCandidateInit)
+            new webRTC.RTCIceCandidate(payload.signal as NativeRTCIceCandidateInit)
           );
         } catch {
           // Ignore late ICE candidates after teardown.
@@ -912,6 +1001,11 @@ export default function ChatDetailsPage() {
       return;
     }
 
+    if (!isFutureSchedule(proposalDate, proposalTime)) {
+      Alert.alert("Invalid schedule", "Please select a future preferred date and time.");
+      return;
+    }
+
     try {
       const payload = await createCustomOrderProposal({
         conversationId,
@@ -1020,9 +1114,10 @@ export default function ChatDetailsPage() {
       </SafeAreaView>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
+        enabled={Platform.OS === "ios" || isKeyboardVisible}
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+        keyboardVerticalOffset={0}
       >
         {ensuringConversation || (!conversationId && orderId) ? (
           <View className="flex-1 items-center justify-center px-8">
@@ -1122,7 +1217,7 @@ export default function ChatDetailsPage() {
                             ${Number(item.customOrderProposal.price || 0).toFixed(2)}
                           </Text>
                           <Text className={`text-[13px] font-medium mt-1 ${isMe ? "text-white/80" : "text-[#5F7182]"}`}>
-                            {item.customOrderProposal.scheduledTime} • {item.customOrderProposal.serviceAddress}
+                            {toScheduleTimeLabel(item.customOrderProposal.scheduledTime) || item.customOrderProposal.scheduledTime} • {item.customOrderProposal.serviceAddress}
                           </Text>
                           {!isMe && user?.role === "client" && item.customOrderProposal.status === "pending" ? (
                             <View className="flex-row mt-4">
@@ -1226,17 +1321,27 @@ export default function ChatDetailsPage() {
         ) : null}
 
         {canOpenProposalComposer && showProposalComposer ? (
-          <View className="bg-white border-t border-[#F2F2F2] px-6 py-4">
+          <KeyboardAwareScrollView
+            className="bg-white border-t border-[#F2F2F2]"
+            style={{ maxHeight: 420 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16 }}
+            showsVerticalScrollIndicator={false}
+          >
             <Text className="text-[12px] font-bold uppercase tracking-[2px] text-[#2286BE] mb-3">
               {isRepeatProposalMode ? "Create Repeat Order" : "Create Custom Order"}
             </Text>
             <TextInput value={proposalTitle} onChangeText={setProposalTitle} placeholder="Order title" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
             <TextInput value={proposalPrice} onChangeText={setProposalPrice} keyboardType="decimal-pad" placeholder="Price" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
             <TextInput value={proposalAddress} onChangeText={setProposalAddress} placeholder="Service address" placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-3 text-[#1A2C42]" />
-            <View className="flex-row mb-3">
-              <TextInput value={proposalDate} onChangeText={setProposalDate} placeholder="YYYY-MM-DD" placeholderTextColor="#7C8B95" className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mr-3 text-[#1A2C42]" />
-              <TextInput value={proposalTime} onChangeText={setProposalTime} placeholder="14:00" placeholderTextColor="#7C8B95" className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] text-[#1A2C42]" />
-            </View>
+            <SchedulePickerFields
+              dateValue={proposalDate}
+              timeValue={proposalTime}
+              onDateChange={setProposalDate}
+              onTimeChange={setProposalTime}
+              className="flex-row mb-3"
+              inputClassName="bg-[#F8FAFC]"
+              labelClassName="text-[12px] font-bold uppercase tracking-[0.14em] text-[#7C8B95] mb-2 ml-1"
+            />
             <TextInput value={proposalDescription} onChangeText={setProposalDescription} multiline textAlignVertical="top" placeholder={isRepeatProposalMode ? "Describe the updated repeat order details" : "Describe the custom work"} placeholderTextColor="#7C8B95" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] min-h-[88px] text-[#1A2C42]" />
             <View className="flex-row mt-4">
               <TouchableOpacity onPress={() => void handleCreateProposal()} disabled={creatingProposal} className="flex-1 bg-[#2286BE] rounded-[18px] py-4 items-center mr-3">
@@ -1246,7 +1351,7 @@ export default function ChatDetailsPage() {
                 <Text className="text-[#1A2C42] font-bold">Cancel</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAwareScrollView>
         ) : null}
 
         <View
@@ -1258,7 +1363,7 @@ export default function ChatDetailsPage() {
             elevation: 10,
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
-            paddingBottom: Math.max(insets.bottom + 12, 24),
+            paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom + 12, 24),
           }}
           className="bg-white px-6 pt-4 border-t border-[#F2F2F2] flex-row items-center"
         >
@@ -1358,14 +1463,14 @@ export default function ChatDetailsPage() {
       >
         <View className={`${isVideoCall ? "flex-1 bg-black" : "flex-1 bg-[#06131D]/90 px-5 py-8 justify-center"}`}>
           {remoteStreamUrl && !isVideoCall ? (
-            <RTCView
+            <WebRTCVideoView
               streamURL={remoteStreamUrl}
               objectFit="cover"
               style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
             />
           ) : null}
           {localStreamUrl && !isVideoCall ? (
-            <RTCView
+            <WebRTCVideoView
               streamURL={localStreamUrl}
               objectFit="cover"
               mirror
@@ -1375,7 +1480,7 @@ export default function ChatDetailsPage() {
           {isVideoCall ? (
             <View className="flex-1 bg-black">
               {remoteStreamUrl ? (
-                <RTCView
+                <WebRTCVideoView
                   streamURL={remoteStreamUrl}
                   objectFit="cover"
                   style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
@@ -1414,7 +1519,7 @@ export default function ChatDetailsPage() {
                 </View>
                 {localStreamUrl ? (
                   <View className="w-[112px] h-[158px] overflow-hidden rounded-[22px] border-2 border-white/60 bg-[#0F172A]">
-                    <RTCView streamURL={localStreamUrl} className="w-full h-full" objectFit="cover" mirror />
+                    <WebRTCVideoView streamURL={localStreamUrl} className="w-full h-full" objectFit="cover" mirror />
                   </View>
                 ) : null}
               </View>
@@ -1481,7 +1586,7 @@ export default function ChatDetailsPage() {
             <View className="p-5">
               <View className="rounded-[28px] bg-[#08131B] overflow-hidden mb-4">
                 {(activeCall || incomingCall?.callType) === "video" && remoteStreamUrl ? (
-                  <RTCView streamURL={remoteStreamUrl} className="w-full h-[280px]" objectFit="cover" />
+                  <WebRTCVideoView streamURL={remoteStreamUrl} className="w-full h-[280px]" objectFit="cover" />
                 ) : (
                   <View className="h-[280px] items-center justify-center px-8 bg-[#08131B]">
                     <ProfileAvatar
@@ -1518,7 +1623,7 @@ export default function ChatDetailsPage() {
                   </View>
                   <View className="w-[110px] h-[160px] rounded-[22px] overflow-hidden bg-[#0F172A]">
                     {(activeCall || incomingCall?.callType) === "video" && localStreamUrl ? (
-                      <RTCView streamURL={localStreamUrl} className="w-full h-full" objectFit="cover" mirror />
+                      <WebRTCVideoView streamURL={localStreamUrl} className="w-full h-full" objectFit="cover" mirror />
                     ) : (
                       <View className="flex-1 items-center justify-center px-4">
                         <Ionicons name="mic" size={28} color="white" />

@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatCurrency } from "@/src/lib/formatters";
@@ -77,6 +78,7 @@ export default function HomePage() {
   const [selectedCategorySlug, setSelectedCategorySlug] = useState("");
   const [searchSubmitted, setSearchSubmitted] = useState(false);
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const insets = useSafeAreaInsets();
   const tabBarHeight =
     Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
@@ -142,6 +144,18 @@ export default function HomePage() {
           : "No active updates";
   const latestNotification = notifications[0];
   const refetchMarkerRef = useRef("");
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToastMessage(message);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage("");
+      toastTimerRef.current = null;
+    }, 2600);
+  };
 
   useEffect(() => {
     if (!latestNotification?.id) return;
@@ -151,11 +165,22 @@ export default function HomePage() {
     void refetchServices();
   }, [latestNotification?.id, refetchDashboard, refetchServices]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   const openCustomRequestFlow = () => {
     const categoryName = searchText.trim();
     const categorySlug = selectedCategorySlug || slugifySearchTerm(categoryName);
 
-    if (!categoryName || !categorySlug) return;
+    if (!categoryName || !categorySlug) {
+      showToast("Enter a service name before requesting this service.");
+      return;
+    }
 
     router.push({
       pathname: "/post-request",
@@ -349,7 +374,7 @@ export default function HomePage() {
                 Submit a custom request and let Jacob notify admins and nearby providers for you.
               </Text>
               <TouchableOpacity onPress={openCustomRequestFlow} className="mt-4 self-start rounded-[16px] bg-[#2286BE] px-4 py-3">
-                <Text className="text-[12px] font-black uppercase tracking-[0.14em] text-white">Request Gig</Text>
+                <Text className="text-[12px] font-black uppercase tracking-[0.14em] text-white">Request This Service</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -698,6 +723,24 @@ export default function HomePage() {
           </View>
         </View>
       </ScrollView>
+
+      {toastMessage ? (
+        <View
+          pointerEvents="none"
+          className="absolute left-6 right-6 rounded-[18px] bg-[#1A2C42] px-4 py-3"
+          style={{
+            top: insets.top + 92,
+            zIndex: 50,
+            elevation: 12,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.18,
+            shadowRadius: 16,
+          }}
+        >
+          <Text className="text-center text-[13px] font-bold text-white">{toastMessage}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -14,12 +14,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { API_BASE_URL } from "@/src/lib/env";
 import { formatMilesFromKm } from "@/src/lib/distance";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
 import {
   useGetPublicServiceByIdQuery,
   useRemoveSavedServiceMutation,
   useSaveServiceMutation,
+  useStartProviderConversationMutation,
   useStartCustomOrderConversationMutation,
 } from "@/src/store/services/apiSlice";
 
@@ -31,6 +33,7 @@ export default function ServiceDetailsPage() {
   const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
   const [saveService, { isLoading: isSavingService }] = useSaveServiceMutation();
   const [removeSavedService, { isLoading: isRemovingSavedService }] = useRemoveSavedServiceMutation();
+  const [startProviderConversation, { isLoading: isContactingProvider }] = useStartProviderConversationMutation();
   const [startCustomOrderConversation, { isLoading: isStartingCustomOrder }] = useStartCustomOrderConversationMutation();
   const service = data?.data || null;
   const [selectedImage, setSelectedImage] = useState(0);
@@ -45,6 +48,29 @@ export default function ServiceDetailsPage() {
     typeof (service as any)?.locationLat === "number" && typeof (service as any)?.locationLng === "number"
       ? { lat: (service as any).locationLat, lng: (service as any).locationLng }
       : null;
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) return error.message;
+    if (!error || typeof error !== "object") return fallback;
+
+    const value = error as {
+      status?: number | string;
+      data?: { message?: string };
+      error?: string;
+    };
+
+    if (typeof value.data?.message === "string" && value.data.message.trim()) {
+      return value.data.message;
+    }
+    if (typeof value.error === "string" && value.error.trim()) {
+      return value.error;
+    }
+    if (value.status === 404) {
+      return `Contact chat API was not found on ${API_BASE_URL}. Please restart or update the backend.`;
+    }
+
+    return fallback;
+  };
 
   const handleToggleSave = async () => {
     if (!service) return;
@@ -83,6 +109,42 @@ export default function ServiceDetailsPage() {
     router.push({ pathname: "/book-service", params: { id: service.id, packageName: activePackage.name } });
   };
 
+  const handleContactProfessional = async () => {
+    if (!service) return;
+    if (!isAuthenticated) {
+      Alert.alert("Sign in required", "Please sign in before contacting this professional.");
+      router.push("/(auth)/login");
+      return;
+    }
+    if (user?.role !== "client") {
+      Alert.alert("Unavailable", "Only customers can contact professionals from service details.");
+      return;
+    }
+
+    try {
+      const payload = await startProviderConversation({
+        providerId: String(service.provider.id || ""),
+        gigId: String(service.id || ""),
+      }).unwrap();
+      const conversation = payload.data?.conversation;
+      const conversationId = String(conversation?.id || "");
+      if (!conversationId) {
+        throw new Error("Conversation could not be opened.");
+      }
+
+      const chatParams = new URLSearchParams({
+        conversationId,
+        name: conversation?.otherUser?.name || service.provider.name,
+        avatar: conversation?.otherUser?.avatar || service.provider.avatar || "",
+        info: service.title || service.categoryName || "Provider chat",
+        targetUserId: conversation?.otherUser?.id || service.provider.id,
+      });
+      router.push(`/chat-details?${chatParams.toString()}`);
+    } catch (error) {
+      Alert.alert("Could not contact professional", getErrorMessage(error, "Please try again."));
+    }
+  };
+
   const handleCustomOrder = async () => {
     if (!service) return;
     if (!isAuthenticated) {
@@ -115,7 +177,7 @@ export default function ServiceDetailsPage() {
         },
       });
     } catch (error) {
-      Alert.alert("Could not start custom order", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert("Could not start custom order", getErrorMessage(error, "Please try again."));
     }
   };
 
@@ -137,7 +199,7 @@ export default function ServiceDetailsPage() {
 
   return (
     <View className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 210 }}>
         <View className="relative w-full h-[340px] bg-slate-100">
           {images[selectedImage] ? (
             <Image source={{ uri: images[selectedImage] }} className="w-full h-full" resizeMode="cover" />
@@ -323,6 +385,17 @@ export default function ServiceDetailsPage() {
         </View>
         <TouchableOpacity onPress={() => void handleBookNow()} className="bg-[#2B84B1] py-5 rounded-[18px] items-center">
           <Text className="text-white font-bold text-[17px]">Book Now</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => void handleContactProfessional()}
+          disabled={isContactingProvider}
+          className="mt-3 rounded-[18px] border border-[#D8E3EC] bg-white py-4 items-center"
+        >
+          {isContactingProvider ? (
+            <ActivityIndicator color="#2B84B1" />
+          ) : (
+            <Text className="text-[#1A2C42] font-bold text-[15px]">Contact Professional</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity onPress={() => void handleCustomOrder()} disabled={isStartingCustomOrder} className="items-center pt-3">
           <Text className="text-[#2B84B1] font-bold text-[14px]">
