@@ -11,9 +11,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { formatDeliveryTime } from "@/src/lib/deliveryTime";
 import { API_BASE_URL } from "@/src/lib/env";
 import { formatMilesFromKm } from "@/src/lib/distance";
 import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
@@ -36,12 +38,21 @@ export default function ServiceDetailsPage() {
   const [startProviderConversation, { isLoading: isContactingProvider }] = useStartProviderConversationMutation();
   const [startCustomOrderConversation, { isLoading: isStartingCustomOrder }] = useStartCustomOrderConversationMutation();
   const service = data?.data || null;
-  const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedMedia, setSelectedMedia] = useState(0);
   const [selectedPackage, setSelectedPackage] = useState(0);
   const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
   const activePackage = useMemo(() => service?.packages?.[selectedPackage] || null, [selectedPackage, service]);
   const images = useMemo(() => (Array.isArray(service?.images) && service.images.length ? service.images : []), [service?.images]);
+  const videos = useMemo(() => (Array.isArray((service as any)?.videos) ? (service as any).videos : []), [service]);
+  const mediaItems = useMemo(
+    () => [
+      ...images.map((url) => ({ type: "image" as const, url })),
+      ...videos.map((url: string) => ({ type: "video" as const, url })),
+    ],
+    [images, videos]
+  );
+  const activeMedia = mediaItems[selectedMedia] || null;
   const isSaved = Boolean(user?.savedServiceIds?.includes(service?.id || ""));
   const isSaveActionLoading = isSavingService || isRemovingSavedService;
   const serviceLocation =
@@ -201,8 +212,18 @@ export default function ServiceDetailsPage() {
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 210 }}>
         <View className="relative w-full h-[340px] bg-slate-100">
-          {images[selectedImage] ? (
-            <Image source={{ uri: images[selectedImage] }} className="w-full h-full" resizeMode="cover" />
+          {activeMedia?.type === "video" ? (
+            <WebView
+              allowsFullscreenVideo
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              source={{
+                html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;background:#000;"><video src="${activeMedia.url}" controls playsinline style="width:100%;height:100vh;object-fit:contain;background:#000;"></video></body></html>`,
+              }}
+              className="w-full h-full bg-black"
+            />
+          ) : activeMedia?.url ? (
+            <Image source={{ uri: activeMedia.url }} className="w-full h-full" resizeMode="cover" />
           ) : null}
           <TouchableOpacity
             onPress={() => router.back()}
@@ -223,15 +244,22 @@ export default function ServiceDetailsPage() {
           </TouchableOpacity>
         </View>
 
-        {images.length > 1 ? (
+        {mediaItems.length > 1 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-6 mt-4">
-            {images.map((image, index) => (
+            {mediaItems.map((media, index) => (
               <TouchableOpacity
-                key={`${image}-${index}`}
-                onPress={() => setSelectedImage(index)}
-                className={`mr-3 rounded-[18px] overflow-hidden border-2 ${selectedImage === index ? "border-[#2B84B1]" : "border-transparent"}`}
+                key={`${media.url}-${index}`}
+                onPress={() => setSelectedMedia(index)}
+                className={`mr-3 rounded-[18px] overflow-hidden border-2 ${selectedMedia === index ? "border-[#2B84B1]" : "border-transparent"}`}
               >
-                <Image source={{ uri: image }} className="w-[82px] h-[82px]" resizeMode="cover" />
+                {media.type === "video" ? (
+                  <View className="w-[82px] h-[82px] bg-slate-900 items-center justify-center">
+                    <Ionicons name="play-circle" size={30} color="white" />
+                    <Text className="mt-1 text-[10px] font-bold text-white">Video</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: media.url }} className="w-[82px] h-[82px]" resizeMode="cover" />
+                )}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -304,7 +332,9 @@ export default function ServiceDetailsPage() {
                 <View className="flex-row items-center justify-between">
                   <View>
                     <Text className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#94A3B8]">Delivery</Text>
-                    <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">{pkg.deliveryTime || "Flexible"}</Text>
+                    <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">
+                      {formatDeliveryTime(pkg.deliveryTime, pkg.deliveryTimeUnit)}
+                    </Text>
                   </View>
                   <Text className="text-[18px] font-black text-[#1A2C42]">{formatCurrency(pkg.price)}</Text>
                 </View>

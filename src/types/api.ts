@@ -125,6 +125,7 @@ export type PublicServiceDetail = {
   description: string;
   requirements: string;
   images: string[];
+  videos?: string[];
   baseCity: string;
   avgPackagePrice: number;
   packages: {
@@ -132,6 +133,7 @@ export type PublicServiceDetail = {
     title: string;
     description: string;
     deliveryTime: string;
+    deliveryTimeUnit?: string;
     price: number;
   }[];
   provider: {

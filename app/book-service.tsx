@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { formatDeliveryTime } from "@/src/lib/deliveryTime";
 import { formatCurrency } from "@/src/lib/formatters";
 import {
   SchedulePickerFields,
@@ -166,6 +167,12 @@ export default function BookServicePage() {
                   <Text className="text-[18px] font-black text-[#2B84B1]">{formatCurrency(pkg.price)}</Text>
                 </View>
                 <Text className="text-[14px] leading-[22px] text-[#7C8B95]">{pkg.description}</Text>
+                <View className="mt-4 flex-row items-center">
+                  <Ionicons name="time-outline" size={16} color="#2B84B1" />
+                  <Text className="ml-2 text-[13px] font-bold text-[#1A2C42]">
+                    Estimated delivery: {formatDeliveryTime(pkg.deliveryTime, pkg.deliveryTimeUnit)}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>

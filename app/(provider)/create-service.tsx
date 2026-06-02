@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
+import { DELIVERY_TIME_UNITS, formatDeliveryTime, normalizeDeliveryTimeUnit, type DeliveryTimeUnit } from "@/src/lib/deliveryTime";
 import { resolveAddressFromCoordinates } from "@/src/lib/geocode";
 import type { CategoryItem } from "@/src/types/api";
 import {
@@ -36,6 +37,7 @@ type PackageData = {
   title: string;
   description: string;
   deliveryTime: string;
+  deliveryTimeUnit: DeliveryTimeUnit;
   price: string;
 };
 
@@ -51,11 +53,13 @@ const PACKAGE_TITLES = ["Basic Package", "Standard Package", "Premium Package"];
 const RADIUS_OPTIONS = ["5", "10", "25", "50"];
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
 const MILES_TO_KM = 1.60934;
+const MAX_IMAGE_COUNT = 4;
+const MAX_VIDEO_COUNT = 2;
 
 const createInitialPackages = (): Record<PackageKey, PackageData> => ({
-  basic: { name: "Basic", title: "Basic Package", description: "", deliveryTime: "1", price: "15" },
-  standard: { name: "Standard", title: "Standard Package", description: "", deliveryTime: "3", price: "30" },
-  premium: { name: "Premium", title: "Premium Package", description: "", deliveryTime: "5", price: "60" },
+  basic: { name: "Basic", title: "Basic Package", description: "", deliveryTime: "1", deliveryTimeUnit: "Days", price: "15" },
+  standard: { name: "Standard", title: "Standard Package", description: "", deliveryTime: "3", deliveryTimeUnit: "Days", price: "30" },
+  premium: { name: "Premium", title: "Premium Package", description: "", deliveryTime: "5", deliveryTimeUnit: "Days", price: "60" },
 });
 
 const convertMilesToKm = (miles: string) => Math.round((Number(miles) || 0) * MILES_TO_KM);
@@ -66,6 +70,13 @@ const convertKmToNearestMilesOption = (km: number | null | undefined) => {
     Math.abs(Number(option) - miles) < Math.abs(Number(closest) - miles) ? option : closest
   );
 };
+
+const normalizeCategory = (category: CategoryItem & { _id?: string }, index: number): CategoryItem => ({
+  id: String(category.id || category._id || category.slug || `category-${index}`),
+  name: String(category.name || ""),
+  slug: String(category.slug || ""),
+  description: category.description,
+});
 
 export default function CreateServicePage() {
   const router = useRouter();
@@ -78,7 +89,9 @@ export default function CreateServicePage() {
   const [selectedMapCoords, setSelectedMapCoords] = useState(DEFAULT_CENTER);
   const [settingAddress, setSettingAddress] = useState(false);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [existingVideoUrls, setExistingVideoUrls] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<PickerAsset[]>([]);
+  const [newVideos, setNewVideos] = useState<PickerAsset[]>([]);
   const [packages, setPackages] = useState<Record<PackageKey, PackageData>>(createInitialPackages());
   const [formData, setFormData] = useState({
     title: "",
@@ -95,13 +108,15 @@ export default function CreateServicePage() {
   const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
   const isCustomCategory = formData.categorySlug === "create-your-own-category";
   const displayedImages = [...existingImageUrls, ...newImages.map((asset) => asset.uri)];
+  const displayedVideos = [...existingVideoUrls, ...newVideos.map((asset) => asset.uri)];
+  const mediaCount = displayedImages.length + displayedVideos.length;
   const { data: categoriesData, isLoading: loadingCategories } = useGetCategoriesQuery();
   const { data: gigsData, isFetching: loadingGig } = useGetMyGigsQuery(undefined, { skip: !editId });
   const [createGig] = useCreateGigMutation();
   const [updateGig] = useUpdateGigMutation();
 
   useEffect(() => {
-    const nextCategories = categoriesData?.data || [];
+    const nextCategories = (categoriesData?.data || []).map(normalizeCategory);
     setCategories(nextCategories);
     if (!editId && nextCategories[0]) {
       setFormData((current) => ({
@@ -142,13 +157,16 @@ export default function CreateServicePage() {
     });
     setSelectedRadius(convertKmToNearestMilesOption(gig.travelRadiusKm));
     setExistingImageUrls(Array.isArray(gig.images) ? gig.images : []);
+    setExistingVideoUrls(Array.isArray(gig.videos) ? gig.videos : []);
     setNewImages([]);
+    setNewVideos([]);
     setPackages({
       basic: {
         name: "Basic",
         title: "Basic Package",
         description: gigPackages[0]?.description || "",
         deliveryTime: String(gigPackages[0]?.deliveryTime || "1"),
+        deliveryTimeUnit: normalizeDeliveryTimeUnit(gigPackages[0]?.deliveryTimeUnit),
         price: String(gigPackages[0]?.price || "15"),
       },
       standard: {
@@ -156,6 +174,7 @@ export default function CreateServicePage() {
         title: "Standard Package",
         description: gigPackages[1]?.description || "",
         deliveryTime: String(gigPackages[1]?.deliveryTime || "3"),
+        deliveryTimeUnit: normalizeDeliveryTimeUnit(gigPackages[1]?.deliveryTimeUnit),
         price: String(gigPackages[1]?.price || "30"),
       },
       premium: {
@@ -163,6 +182,7 @@ export default function CreateServicePage() {
         title: "Premium Package",
         description: gigPackages[2]?.description || "",
         deliveryTime: String(gigPackages[2]?.deliveryTime || "5"),
+        deliveryTimeUnit: normalizeDeliveryTimeUnit(gigPackages[2]?.deliveryTimeUnit),
         price: String(gigPackages[2]?.price || "60"),
       },
     });
@@ -173,7 +193,7 @@ export default function CreateServicePage() {
     return categories.find((item) => item.slug === formData.categorySlug)?.name || formData.categoryName || "Category";
   }, [categories, formData.categoryName, formData.categorySlug, formData.customCategoryName, isCustomCategory]);
 
-  const updatePackage = (field: keyof PackageData, value: string) => {
+  const updatePackage = <K extends keyof PackageData>(field: K, value: PackageData[K]) => {
     setPackages((current) => ({
       ...current,
       [activePackage]: {
@@ -194,8 +214,8 @@ export default function CreateServicePage() {
   };
 
   const pickImages = async () => {
-    if (displayedImages.length >= 4) {
-      Alert.alert("Limit reached", "You can upload up to 4 images.");
+    if (displayedImages.length >= MAX_IMAGE_COUNT) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_IMAGE_COUNT} images.`);
       return;
     }
 
@@ -203,17 +223,40 @@ export default function CreateServicePage() {
       mediaTypes: "images",
       allowsMultipleSelection: true,
       quality: 0.8,
-      selectionLimit: 4 - displayedImages.length,
+      selectionLimit: MAX_IMAGE_COUNT - displayedImages.length,
     });
 
     if (result.canceled) return;
 
-    const selectedAssets = result.assets.slice(0, 4 - displayedImages.length).map((asset) => ({
+    const selectedAssets = result.assets.slice(0, MAX_IMAGE_COUNT - displayedImages.length).map((asset) => ({
       uri: asset.uri,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
     }));
     setNewImages((current) => [...current, ...selectedAssets]);
+  };
+
+  const pickVideos = async () => {
+    if (displayedVideos.length >= MAX_VIDEO_COUNT) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_VIDEO_COUNT} videos.`);
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "videos",
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: MAX_VIDEO_COUNT - displayedVideos.length,
+    });
+
+    if (result.canceled) return;
+
+    const selectedAssets = result.assets.slice(0, MAX_VIDEO_COUNT - displayedVideos.length).map((asset) => ({
+      uri: asset.uri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+    }));
+    setNewVideos((current) => [...current, ...selectedAssets]);
   };
 
   const handleUseCurrentLocation = async () => {
@@ -273,8 +316,8 @@ export default function CreateServicePage() {
       }
     }
 
-    if (step === 3 && displayedImages.length < 1) {
-      Alert.alert("Required", "Please select at least one image.");
+    if (step === 3 && mediaCount < 1) {
+      Alert.alert("Required", "Please select at least one image or video.");
       return false;
     }
 
@@ -315,16 +358,25 @@ export default function CreateServicePage() {
             title: PACKAGE_TITLES[index],
             description: packages[key].description.trim(),
             deliveryTime: packages[key].deliveryTime.trim(),
+            deliveryTimeUnit: packages[key].deliveryTimeUnit,
             price: Number(packages[key].price) || 0,
           }))
         )
       );
       payload.append("images", JSON.stringify(existingImageUrls));
+      payload.append("videos", JSON.stringify(existingVideoUrls));
       newImages.forEach((asset, index) => {
         payload.append("images", {
           uri: asset.uri,
           name: asset.fileName || `gig-image-${index + 1}.jpg`,
           type: asset.mimeType || "image/jpeg",
+        } as any);
+      });
+      newVideos.forEach((asset, index) => {
+        payload.append("videos", {
+          uri: asset.uri,
+          name: asset.fileName || `gig-video-${index + 1}.mp4`,
+          type: asset.mimeType || "video/mp4",
         } as any);
       });
 
@@ -479,7 +531,8 @@ export default function CreateServicePage() {
                   textAlignVertical="top"
                 />
 
-                <View className="flex-row mb-6">
+                <View className="mb-6">
+                  <View className="flex-row">
                   <InputField
                     compact
                     label="Delivery Time"
@@ -497,6 +550,22 @@ export default function CreateServicePage() {
                     placeholder="25"
                     keyboardType="numeric"
                   />
+                  </View>
+                  <Text className="text-[12px] font-bold text-[#A0AEC0] mb-2 uppercase">Delivery Unit</Text>
+                  <View className="flex-row">
+                    {DELIVERY_TIME_UNITS.map((unit) => (
+                      <TouchableOpacity
+                        key={unit}
+                        onPress={() => updatePackage("deliveryTimeUnit", unit)}
+                        className={`mr-2 rounded-full px-4 py-2 ${packages[activePackage].deliveryTimeUnit === unit ? "bg-[#2B84B1]" : "bg-gray-50 border border-gray-200"}`}
+                      >
+                        <Text className={`text-[12px] font-bold ${packages[activePackage].deliveryTimeUnit === unit ? "text-white" : "text-[#1A2C42]"}`}>{unit}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text className="mt-3 text-[13px] font-semibold text-[#7C8B95]">
+                    Shows to clients as {formatDeliveryTime(packages[activePackage].deliveryTime, packages[activePackage].deliveryTimeUnit)}.
+                  </Text>
                 </View>
               </View>
             </View>
@@ -505,14 +574,25 @@ export default function CreateServicePage() {
           {!loadingGig && step === 3 ? (
             <View>
               <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">Gallery</Text>
-              <Text className="text-[14px] text-[#7C8B95] mb-6">Upload at least one and up to four images.</Text>
-              <TouchableOpacity
-                onPress={pickImages}
-                className="w-full h-[170px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center mb-6"
-              >
-                <Ionicons name="cloud-upload" size={36} color="#2B84B1" />
-                <Text className="font-bold text-[#1A2C42] mt-2">Select Images</Text>
-              </TouchableOpacity>
+              <Text className="text-[14px] text-[#7C8B95] mb-6">Upload images and videos that introduce your service.</Text>
+              <View className="flex-row mb-6">
+                <TouchableOpacity
+                  onPress={pickImages}
+                  className="flex-1 h-[150px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center mr-3"
+                >
+                  <Ionicons name="cloud-upload" size={34} color="#2B84B1" />
+                  <Text className="font-bold text-[#1A2C42] mt-2">Select Images</Text>
+                  <Text className="text-[12px] text-[#7C8B95] mt-1">Up to {MAX_IMAGE_COUNT}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={pickVideos}
+                  className="flex-1 h-[150px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center"
+                >
+                  <Ionicons name="videocam-outline" size={34} color="#2B84B1" />
+                  <Text className="font-bold text-[#1A2C42] mt-2">Select Videos</Text>
+                  <Text className="text-[12px] text-[#7C8B95] mt-1">Up to {MAX_VIDEO_COUNT}</Text>
+                </TouchableOpacity>
+              </View>
 
               <View className="flex-row flex-wrap gap-4">
                 {displayedImages.map((image, index) => (
@@ -534,6 +614,31 @@ export default function CreateServicePage() {
                   </View>
                 ))}
               </View>
+              {displayedVideos.length ? (
+                <View className="mt-6">
+                  <Text className="text-[14px] font-bold text-[#1A2C42] mb-3 ml-1">Videos</Text>
+                  {displayedVideos.map((video, index) => (
+                    <View key={`${video}-${index}`} className="mb-3 rounded-[18px] bg-[#F8FAFC] border border-gray-100 px-4 py-3 flex-row items-center">
+                      <Ionicons name="videocam" size={22} color="#2B84B1" />
+                      <Text className="ml-3 flex-1 text-[13px] font-bold text-[#1A2C42]" numberOfLines={1}>
+                        {index < existingVideoUrls.length ? `Existing video ${index + 1}` : newVideos[index - existingVideoUrls.length]?.fileName || `Selected video ${index + 1}`}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (index < existingVideoUrls.length) {
+                            setExistingVideoUrls((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                          } else {
+                            const fileIndex = index - existingVideoUrls.length;
+                            setNewVideos((current) => current.filter((_, itemIndex) => itemIndex !== fileIndex));
+                          }
+                        }}
+                      >
+                        <Ionicons name="close-circle" size={24} color="#94A3B8" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -617,7 +722,7 @@ export default function CreateServicePage() {
                 <SummaryRow label="Title" value={formData.title || "Untitled gig"} />
                 <SummaryRow label="Category" value={activeCategoryLabel} />
                 <SummaryRow label="Expert Type" value={formData.expertType === "team" ? "Team" : "Solo"} />
-                <SummaryRow label="Images" value={`${displayedImages.length} selected`} />
+                <SummaryRow label="Media" value={`${displayedImages.length} images, ${displayedVideos.length} videos`} />
                 <SummaryRow label="Location" value={formData.baseCity || "Not set"} />
                 <SummaryRow label="Radius" value={`${selectedRadius} miles`} />
               </View>
