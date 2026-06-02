@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const ACCESS_TOKEN_KEY = "auth_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 const USER_KEY = "auth_user";
+const TERMS_ACCEPTED_KEY = "onboarding_terms_accepted";
+const ONBOARDING_COMPLETED_KEY = "onboarding_completed";
 
 let memoryAccessToken: string | null = null;
 let memoryRefreshToken: string | null = null;
@@ -56,5 +58,26 @@ export const authStorage = {
     await AsyncStorage.removeItem(ACCESS_TOKEN_KEY);
     await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
+  },
+};
+
+export const onboardingStorage = {
+  async hasAcceptedTerms() {
+    return (await AsyncStorage.getItem(TERMS_ACCEPTED_KEY)) === "true";
+  },
+  async setTermsAccepted() {
+    await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, "true");
+  },
+  async hasCompletedOnboarding() {
+    return (await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY)) === "true";
+  },
+  async setOnboardingCompleted() {
+    await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
+  },
+  async setIntroCompleted() {
+    await AsyncStorage.multiSet([
+      [TERMS_ACCEPTED_KEY, "true"],
+      [ONBOARDING_COMPLETED_KEY, "true"],
+    ]);
   },
 };

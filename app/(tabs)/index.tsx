@@ -671,8 +671,8 @@ export default function HomePage() {
               Join as a provider, publish your services, manage requests, and build trust with verified reviews.
             </Text>
             <View className="flex-row mt-5">
-              <TouchableOpacity onPress={() => router.push("/join-provider")} className="bg-white px-5 py-4 rounded-[18px] mr-3">
-                <Text className="font-bold text-[#1A2C42]">Learn More</Text>
+              <TouchableOpacity onPress={() => router.push("/provider-help")} className="bg-white px-5 py-4 rounded-[18px] mr-3">
+                <Text className="font-bold text-[#1A2C42]">Provider Info</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push("/(auth)/provider-register")} className="bg-white/10 border border-white/15 px-5 py-4 rounded-[18px]">
                 <Text className="font-bold text-white">Become a Provider</Text>

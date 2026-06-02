@@ -3,6 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -18,7 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { formatDateLabel } from "@/src/lib/formatters";
-import { useGetConversationsQuery } from "@/src/store/services/apiSlice";
+import { useDeleteConversationsMutation, useGetConversationsQuery } from "@/src/store/services/apiSlice";
 
 const getQueryErrorMessage = (error: unknown, fallback: string) => {
   if (!error || typeof error !== "object") return fallback;
@@ -58,11 +59,14 @@ export function ConversationListScreen() {
   const tabBarHeight = Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const { data, isLoading, isFetching, error, refetch } = useGetConversationsQuery(undefined, {
     refetchOnFocus: true,
     refetchOnReconnect: true,
     pollingInterval: 15000,
   });
+  const [deleteConversations, { isLoading: deletingConversations }] = useDeleteConversationsMutation();
 
   const readParam = (value?: string | string[]) => {
     if (Array.isArray(value)) return value[0] || "";
@@ -110,13 +114,17 @@ export function ConversationListScreen() {
         void refetch();
       };
 
+      socket.on("chat:created", handleConversationRefresh);
       socket.on("chat:message:new", handleConversationRefresh);
       socket.on("chat:conversation:updated", handleConversationRefresh);
+      socket.on("chat:conversation:deleted", handleConversationRefresh);
       socket.on("notification:new", handleConversationRefresh);
 
       return () => {
+        socket.off("chat:created", handleConversationRefresh);
         socket.off("chat:message:new", handleConversationRefresh);
         socket.off("chat:conversation:updated", handleConversationRefresh);
+        socket.off("chat:conversation:deleted", handleConversationRefresh);
         socket.off("notification:new", handleConversationRefresh);
       };
     }, [refetch, socket])
@@ -148,6 +156,53 @@ export function ConversationListScreen() {
     });
   }, [activeTab, data?.data, search]);
   const errorMessage = getQueryErrorMessage(error, "We could not load your conversations.");
+  const selectedCount = selectedConversationIds.length;
+
+  const toggleSelectedConversation = (conversationId: string) => {
+    setSelectedConversationIds((current) =>
+      current.includes(conversationId)
+        ? current.filter((id) => id !== conversationId)
+        : [...current, conversationId]
+    );
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedConversationIds([]);
+  };
+
+  const handleDeleteSelected = () => {
+    if (!selectionMode) {
+      setSelectionMode(true);
+      return;
+    }
+
+    if (!selectedCount) {
+      Alert.alert("No chats selected", "Select one or more conversations to delete.");
+      return;
+    }
+
+    Alert.alert(
+      "Delete selected chats?",
+      `This will remove ${selectedCount} conversation${selectedCount === 1 ? "" : "s"} from your inbox.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteConversations(selectedConversationIds).unwrap();
+              exitSelectionMode();
+              void refetch();
+            } catch {
+              Alert.alert("Delete failed", "Could not delete the selected conversations right now.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <KeyboardAvoidingView
@@ -191,7 +246,25 @@ export function ConversationListScreen() {
 
       <View className="px-6 mb-8 flex-row items-center mt-2">
         <View className="w-1.5 h-6 bg-[#2286BE] rounded-full mr-3" />
-        <Text className="text-[24px] font-bold text-[#1A2C42]">Chat</Text>
+        <Text className="text-[24px] font-bold text-[#1A2C42] flex-1">
+          {selectionMode ? `${selectedCount} selected` : "Chat"}
+        </Text>
+        {selectionMode ? (
+          <TouchableOpacity onPress={exitSelectionMode} className="px-4 py-2 rounded-full bg-[#F8FAFC] mr-2">
+            <Text className="font-bold text-[#7C8B95]">Cancel</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          onPress={handleDeleteSelected}
+          disabled={deletingConversations}
+          className={`w-11 h-11 rounded-full items-center justify-center ${selectionMode ? "bg-[#EF4444]" : "bg-[#F8FAFC]"}`}
+        >
+          {deletingConversations ? (
+            <ActivityIndicator size="small" color={selectionMode ? "white" : "#EF4444"} />
+          ) : (
+            <Ionicons name="trash-outline" size={20} color={selectionMode ? "white" : "#EF4444"} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <View className="px-6 mb-6">
@@ -236,7 +309,11 @@ export function ConversationListScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() =>
+              onPress={() => {
+                if (selectionMode) {
+                  toggleSelectedConversation(item.id);
+                  return;
+                }
                 router.push({
                   pathname: "/chat-details",
                   params: {
@@ -248,10 +325,23 @@ export function ConversationListScreen() {
                     targetUserId: item.otherUser.id,
                     targetUserRole: item.otherUser.role || "",
                   },
-                })
-              }
+                });
+              }}
+              onLongPress={() => {
+                setSelectionMode(true);
+                toggleSelectedConversation(item.id);
+              }}
               className="flex-row items-center px-6 py-4"
             >
+              {selectionMode ? (
+                <View
+                  className={`w-6 h-6 rounded-full border-2 mr-3 items-center justify-center ${
+                    selectedConversationIds.includes(item.id) ? "bg-[#2286BE] border-[#2286BE]" : "border-[#CBD5E1]"
+                  }`}
+                >
+                  {selectedConversationIds.includes(item.id) ? <Ionicons name="checkmark" size={15} color="white" /> : null}
+                </View>
+              ) : null}
               <View className="relative">
                 {item.otherUser.avatar ? (
                   <Image source={{ uri: item.otherUser.avatar }} className="w-[60px] h-[60px] rounded-full border-2 border-[#EAF3FA]" />

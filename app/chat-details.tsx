@@ -255,7 +255,7 @@ export default function ChatDetailsPage() {
   const [autoAcceptIncomingCall, setAutoAcceptIncomingCall] = useState(false);
   const [ensureConversationByOrder, { isLoading: ensuringConversation }] =
     useEnsureConversationByOrderMutation();
-  const { data: conversationsPayload } = useGetConversationsQuery();
+  const { data: conversationsPayload, refetch: refetchConversations } = useGetConversationsQuery();
   const [createCustomOrderProposal, { isLoading: creatingProposal }] = useCreateCustomOrderProposalMutation();
   const [respondToCustomOrderProposal, { isLoading: respondingProposal }] = useRespondToCustomOrderProposalMutation();
 
@@ -279,7 +279,7 @@ export default function ChatDetailsPage() {
   );
   const selectedGigId = String(selectedConversation?.gigId || "");
 
-  const { data, isLoading } = useGetConversationMessagesQuery(
+  const { data, isLoading, refetch: refetchMessages } = useGetConversationMessagesQuery(
     { conversationId, page: 1, limit: 100 },
     { skip: !conversationId }
   );
@@ -399,6 +399,10 @@ export default function ChatDetailsPage() {
   useEffect(() => {
     setBlockedBy(blockedByParam ? String(blockedByParam) : null);
   }, [blockedByParam]);
+
+  useEffect(() => {
+    setBlockedBy(selectedConversation?.blockedBy || null);
+  }, [selectedConversation?.blockedBy]);
 
   useEffect(() => {
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 120);
@@ -793,6 +797,30 @@ export default function ChatDetailsPage() {
       socket.off("chat:message:new", handleNewMessage);
     };
   }, [conversationId, socket]);
+
+  useEffect(() => {
+    if (!socket || !conversationId) return;
+
+    const handleConversationUpdated = (payload: { conversationId?: string; blockedBy?: string | null }) => {
+      if (payload?.conversationId && payload.conversationId !== conversationId) return;
+      if (Object.prototype.hasOwnProperty.call(payload || {}, "blockedBy")) {
+        setBlockedBy(payload.blockedBy || null);
+      }
+      void refetchConversations();
+      void refetchMessages();
+      if (payload?.conversationId === conversationId) {
+        void markRead(conversationId);
+      }
+    };
+
+    socket.on("chat:created", handleConversationUpdated);
+    socket.on("chat:conversation:updated", handleConversationUpdated);
+
+    return () => {
+      socket.off("chat:created", handleConversationUpdated);
+      socket.off("chat:conversation:updated", handleConversationUpdated);
+    };
+  }, [conversationId, markRead, refetchConversations, refetchMessages, socket]);
 
   useEffect(() => {
     if (!socket) return;

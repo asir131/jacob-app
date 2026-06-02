@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "expo-router";
-import { Image, Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { UserAvatar } from "@/src/components/UserAvatar";
 
 export default function ProviderSettings() {
     const router = useRouter();
@@ -54,7 +55,7 @@ export default function ProviderSettings() {
             <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
                 {/* Profile Widget */}
                 <View className="bg-white rounded-[24px] p-5 mb-8 border border-gray-100 shadow-sm shadow-gray-100 flex-row items-center">
-                    <Image source={{ uri: user?.avatar || "https://i.pravatar.cc/150?u=joyboy" }} className="w-16 h-16 rounded-full mr-4 bg-gray-100" />
+                    <UserAvatar uri={user?.avatar} size={64} className="mr-4" />
                     <View className="flex-1">
                         <Text className="text-[18px] font-bold text-[#1A2C42] mb-1">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Provider"}</Text>
                         <Text className="text-[14px] text-[#7C8B95] font-medium">{user?.sellerLevel || "Seller"}</Text>

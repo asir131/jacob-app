@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { UserAvatar } from "@/src/components/UserAvatar";
 
 import { useRouter } from "expo-router";
 
@@ -58,7 +59,7 @@ export default function SettingsPage() {
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
                 {/* Profile Widget */}
                 <View className="px-6 mb-8">
-                    <TouchableOpacity
+                    <View
                         className="bg-white rounded-[24px] p-5 flex-row items-center border border-gray-100"
                         style={{
                             shadowColor: "#1A2C42",
@@ -68,10 +69,7 @@ export default function SettingsPage() {
                             elevation: 4
                         }}
                     >
-                        <Image
-                            source={{ uri: user?.avatar || "https://i.pravatar.cc/150?u=joyboy" }}
-                            className="w-[68px] h-[68px] rounded-full mr-4 bg-gray-100"
-                        />
+                        <UserAvatar uri={user?.avatar} size={68} className="mr-4" />
                         <View className="flex-1">
                             <Text className="text-[20px] font-bold text-[#1A2C42] mb-0.5">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User"}</Text>
                             <Text className="text-[14px] text-[#7C8B95] font-medium mb-1.5">{user?.email || "Email unavailable"}</Text>
@@ -79,10 +77,14 @@ export default function SettingsPage() {
                                 <Text className="text-[#2B84B1] text-[12px] font-bold tracking-wide">{(user?.role || "client").toUpperCase()}</Text>
                             </View>
                         </View>
-                        <View className="w-10 h-10 rounded-full bg-gray-50 items-center justify-center">
+                        <TouchableOpacity
+                            onPress={() => router.push("/(profile)/personal-info")}
+                            className="w-10 h-10 rounded-full bg-gray-50 items-center justify-center"
+                            activeOpacity={0.7}
+                        >
                             <Ionicons name="pencil" size={18} color="#2B84B1" />
-                        </View>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Quick Navigation */}
@@ -110,8 +112,6 @@ export default function SettingsPage() {
                         <SettingsRow icon="briefcase-outline" label="My Orders" color="#2B84B1" route="/(tabs)/booking" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="heart-outline" label="Saved Services" color="#2B84B1" route="/client-saved-services" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="settings-outline" label="Settings" value="Current" color="#2B84B1" />
                     </View>
                 </View>
 
@@ -140,8 +140,6 @@ export default function SettingsPage() {
                         <SettingsRow icon="mail-outline" label="Contact Us" color="#10B981" route="/contact" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="information-circle-outline" label="About Jacob" color="#10B981" route="/about" />
-                        <View className="h-[1px] bg-gray-100 ml-14" />
-                        <SettingsRow icon="briefcase-outline" label="Join as Provider" color="#10B981" route="/join-provider" />
                         <View className="h-[1px] bg-gray-100 ml-14" />
                         <SettingsRow icon="rocket-outline" label="Success Stories" color="#10B981" route="/success-stories" />
                         <View className="h-[1px] bg-gray-100 ml-14" />

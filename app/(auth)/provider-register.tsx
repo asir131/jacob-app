@@ -1,5 +1,5 @@
-import { Redirect } from "expo-router";
+import RegisterScreen from "./register";
 
 export default function ProviderRegisterScreen() {
-    return <Redirect href="/(auth)/register?role=provider" />;
+    return <RegisterScreen initialRole="provider" lockRole />;
 }

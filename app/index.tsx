@@ -3,7 +3,7 @@ import { Redirect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, role, user } = useAuth();
 
   if (loading) {
     return (
@@ -17,5 +17,5 @@ export default function Index() {
     return <Redirect href="/(auth)" />;
   }
 
-  return <Redirect href={user.role === "provider" ? "/(provider-tabs)" : "/(tabs)"} />;
+  return <Redirect href={role === "provider" ? "/(provider-tabs)" : "/(tabs)"} />;
 }

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
@@ -18,8 +18,6 @@ export default function SecurityPage() {
     confirmPassword: "",
   });
   const [loading, setLoading] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(true);
-  const [faceId, setFaceId] = useState(true);
   const [showPasswords, setShowPasswords] = useState({
     currentPassword: false,
     newPassword: false,
@@ -117,25 +115,6 @@ export default function SecurityPage() {
         </View>
 
         <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
-          <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-1">Advanced Security</Text>
-          <View className="bg-white rounded-[24px] px-5 py-2 mb-8 border border-gray-100 shadow-sm shadow-black/5">
-            <View className="flex-row items-center py-4">
-              <View className="w-10 h-10 bg-[#EAF3FA] rounded-xl items-center justify-center mr-4">
-                <Ionicons name="shield-checkmark-outline" size={22} color="#2B84B1" />
-              </View>
-              <Text className="flex-1 text-[16px] font-semibold text-[#1A2C42]">Two-Factor Authentication</Text>
-              <Switch value={twoFactor} onValueChange={setTwoFactor} trackColor={{ false: "#E2E8F0", true: "#2B84B1" }} thumbColor="#FFFFFF" />
-            </View>
-            <View className="h-[1px] bg-gray-100 ml-14" />
-            <View className="flex-row items-center py-4">
-              <View className="w-10 h-10 bg-[#EAF3FA] rounded-xl items-center justify-center mr-4">
-                <Ionicons name="scan-outline" size={22} color="#2B84B1" />
-              </View>
-              <Text className="flex-1 text-[16px] font-semibold text-[#1A2C42]">Face ID / Biometrics</Text>
-              <Switch value={faceId} onValueChange={setFaceId} trackColor={{ false: "#E2E8F0", true: "#2B84B1" }} thumbColor="#FFFFFF" />
-            </View>
-          </View>
-
           <Text className="text-[14px] font-bold tracking-widest text-[#A0AEC0] uppercase mb-4 ml-1">Change Password</Text>
           <PasswordInput label="Current Password" placeholder="Enter current password" field="currentPassword" />
           <PasswordInput label="New Password" placeholder="Enter new password" field="newPassword" />

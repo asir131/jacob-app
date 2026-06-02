@@ -1,23 +1,66 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { onboardingStorage } from "@/src/lib/storage";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AuthIndex() {
     const router = useRouter();
+    const { isAuthenticated, loading, role, user } = useAuth();
     const [step, setStep] = useState(1);
     const [isAccepted, setIsAccepted] = useState(false);
+    const [checkingIntro, setCheckingIntro] = useState(true);
 
-    const handleNext = () => {
+    useEffect(() => {
+        let isMounted = true;
+
+        const routeFromSavedState = async () => {
+            if (loading) return;
+
+            if (isAuthenticated && user) {
+                router.replace(role === "provider" ? "/(provider-tabs)" : "/(tabs)");
+                return;
+            }
+
+            const [termsAccepted, onboardingCompleted] = await Promise.all([
+                onboardingStorage.hasAcceptedTerms(),
+                onboardingStorage.hasCompletedOnboarding(),
+            ]);
+
+            if (!isMounted) return;
+
+            if (onboardingCompleted) {
+                router.replace("/(auth)/login");
+                return;
+            }
+
+            if (termsAccepted) {
+                router.replace("/(auth)/onboarding");
+                return;
+            }
+
+            setCheckingIntro(false);
+        };
+
+        void routeFromSavedState();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isAuthenticated, loading, role, router, user]);
+
+    const handleNext = async () => {
         if (!isAccepted) return;
 
         if (step === 1) {
             setStep(2);
             setIsAccepted(false);
         } else {
-            router.push("/(auth)/onboarding");
+            await onboardingStorage.setTermsAccepted();
+            router.replace("/(auth)/onboarding");
         }
     };
 
@@ -89,6 +132,11 @@ export default function AuthIndex() {
 
     return (
         <SafeAreaView className="flex-1 bg-white">
+            {loading || checkingIntro ? (
+                <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="large" color="#2286BE" />
+                </View>
+            ) : (
             <ScrollView className="flex-1 px-8 pt-10" showsVerticalScrollIndicator={false}>
                 {step === 1 ? <PrivacyView /> : <TermsView />}
 
@@ -115,6 +163,7 @@ export default function AuthIndex() {
                 </TouchableOpacity>
                 <View className="h-4" />
             </ScrollView>
+            )}
         </SafeAreaView>
     );
 }

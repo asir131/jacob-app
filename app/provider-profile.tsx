@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { UserAvatar } from "@/src/components/UserAvatar";
 import { formatCurrency } from "@/src/lib/formatters";
 import { useGetPublicProviderProfileQuery } from "@/src/store/services/apiSlice";
 
@@ -52,10 +53,7 @@ export default function ProviderProfilePage() {
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 20, paddingBottom: 120 }}>
         <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5 mb-8">
           <View className="items-center">
-            <Image
-              source={{ uri: provider.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(providerName)}&background=2286BE&color=fff` }}
-              className="w-[110px] h-[110px] rounded-full bg-gray-100 mb-4"
-            />
+            <UserAvatar uri={provider.avatar} size={110} className="mb-4" />
             <Text className="text-[26px] font-black text-[#1A2C42] text-center">{providerName}</Text>
             <Text className="text-[14px] font-bold text-[#2B84B1] mt-2">
               {provider.sellerLevel || provider.level || "New"} Provider

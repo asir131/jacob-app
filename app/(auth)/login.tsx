@@ -62,8 +62,8 @@ const getGoogleSignin = () => {
 
 export default function LoginScreen() {
     const router = useRouter();
-    const { role } = useLocalSearchParams();
-    const { loginWithPassword, setSession } = useAuth();
+    const { role: requestedRole } = useLocalSearchParams();
+    const { isAuthenticated, loading: authLoading, loginWithPassword, role, setSession, user } = useAuth();
     const [loginWithGoogle] = useLoginWithGoogleMutation();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -71,7 +71,7 @@ export default function LoginScreen() {
     const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
-    const googleRole = role === "provider" ? "provider" : "client";
+    const googleRole = requestedRole === "provider" ? "provider" : "client";
 
     useEffect(() => {
         if (!GOOGLE_WEB_CLIENT_ID) return;
@@ -83,6 +83,11 @@ export default function LoginScreen() {
             forceCodeForRefreshToken: false,
         });
     }, []);
+
+    useEffect(() => {
+        if (authLoading || !isAuthenticated || !user) return;
+        router.replace(role === "provider" ? "/(provider-tabs)" : "/(tabs)");
+    }, [authLoading, isAuthenticated, role, router, user]);
 
     const handleSignIn = async () => {
         if (!email.trim() || !password.trim()) {
@@ -149,6 +154,16 @@ export default function LoginScreen() {
             setGoogleLoading(false);
         }
     };
+
+    if (authLoading || (isAuthenticated && user)) {
+        return (
+            <SafeAreaView className="flex-1 bg-white">
+                <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="large" color="#2286BE" />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -289,7 +304,7 @@ export default function LoginScreen() {
                             <Text className="text-[#7C8B95] font-medium">
                                 Don&apos;t have an account?{" "}
                             </Text>
-                            <TouchableOpacity onPress={() => router.push(role === 'provider' ? "/(auth)/register?role=provider" : "/(auth)/register")}>
+                            <TouchableOpacity onPress={() => router.push(requestedRole === 'provider' ? "/(auth)/register?role=provider" : "/(auth)/register")}>
                                 <Text className="text-[#2B84B1] font-bold">Sign Up</Text>
                             </TouchableOpacity>
                         </View>

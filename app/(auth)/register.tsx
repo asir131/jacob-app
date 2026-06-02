@@ -23,11 +23,16 @@ import { KeyboardAwareScrollView as ScrollView } from "@/src/components/Keyboard
 
 type SignupRole = "client" | "provider";
 
-export default function RegisterScreen() {
+type RegisterScreenProps = {
+  initialRole?: SignupRole;
+  lockRole?: boolean;
+};
+
+export default function RegisterScreen({ initialRole, lockRole = false }: RegisterScreenProps = {}) {
   const router = useRouter();
   const params = useLocalSearchParams<{ role?: string }>();
   const [selectedRole, setSelectedRole] = useState<SignupRole>(
-    params.role === "provider" ? "provider" : "client"
+    initialRole ?? (params.role === "provider" ? "provider" : "client")
   );
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -129,72 +134,38 @@ export default function RegisterScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: 40 }}
           >
-          <View className="items-center mt-10 mb-8">
-            <Image source={ImageImport.icon} className="w-[100px] h-[100px]" resizeMode="contain" />
-            <Text className="text-[32px] font-bold text-[#2B84B1] mt-4">{roleCopy.title}</Text>
+          <View className={`items-center ${lockRole ? "mt-5 mb-5" : "mt-10 mb-8"}`}>
+            <Image source={ImageImport.icon} className={lockRole ? "w-[72px] h-[72px]" : "w-[100px] h-[100px]"} resizeMode="contain" />
+            <Text className={`${lockRole ? "text-[28px]" : "text-[32px]"} font-bold text-[#2B84B1] mt-4`}>{roleCopy.title}</Text>
             <Text className="text-[16px] text-[#7C8B95] mt-2 text-center leading-[24px]">
               {roleCopy.subtitle}
             </Text>
           </View>
 
-          <View className="bg-[#F8FAFC] rounded-[24px] p-2 flex-row mb-6">
-            {[
-              { id: "client", label: "Client", icon: "person-outline" },
-              { id: "provider", label: "Provider", icon: "briefcase-outline" },
-            ].map((role) => {
-              const active = selectedRole === role.id;
-              return (
-                <TouchableOpacity
-                  key={role.id}
-                  onPress={() => setSelectedRole(role.id as SignupRole)}
-                  className={`flex-1 rounded-[18px] py-4 px-3 flex-row items-center justify-center ${active ? "bg-white" : ""}`}
-                >
-                  <Ionicons
-                    name={role.icon as keyof typeof Ionicons.glyphMap}
-                    size={18}
-                    color={active ? "#2B84B1" : "#7C8B95"}
-                  />
-                  <Text className={`ml-2 font-bold ${active ? "text-[#2B84B1]" : "text-[#7C8B95]"}`}>
-                    {role.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {selectedRole === "provider" ? (
-            <View className="mb-8">
-              <View className="bg-[#1A2C42] rounded-[28px] p-6 mb-5">
-                <Text className="text-[12px] font-bold tracking-[0.16em] uppercase text-[#9CCAE2]">
-                  Provider Benefits
-                </Text>
-                <Text className="text-white text-[26px] font-black leading-[32px] mt-3">
-                  Turn your skills into steady bookings
-                </Text>
-                <Text className="text-white/75 text-[15px] leading-[24px] mt-3">
-                  Create services, respond to client requests, manage orders, receive reviews, and handle payouts from the app.
-                </Text>
-              </View>
-
+          {!lockRole ? (
+            <View className="bg-[#F8FAFC] rounded-[24px] p-2 flex-row mb-6">
               {[
-                "Publish your services and pricing",
-                "Get discovered by nearby clients",
-                "Manage chats, orders, and earnings in one place",
-              ].map((item) => (
-                <View key={item} className="flex-row items-center bg-white rounded-[20px] border border-gray-100 px-4 py-4 mb-3">
-                  <View className="w-9 h-9 rounded-full bg-[#EAF3FA] items-center justify-center mr-3">
-                    <Ionicons name="checkmark" size={18} color="#2B84B1" />
-                  </View>
-                  <Text className="flex-1 text-[15px] font-semibold text-[#1A2C42]">{item}</Text>
-                </View>
-              ))}
-
-              <TouchableOpacity
-                onPress={() => router.push("/join-provider")}
-                className="mt-2 self-start px-5 py-3 rounded-full bg-[#EAF3FA]"
-              >
-                <Text className="font-bold text-[#2B84B1]">Learn More About Provider Benefits</Text>
-              </TouchableOpacity>
+                { id: "client", label: "Client", icon: "person-outline" },
+                { id: "provider", label: "Provider", icon: "briefcase-outline" },
+              ].map((role) => {
+                const active = selectedRole === role.id;
+                return (
+                  <TouchableOpacity
+                    key={role.id}
+                    onPress={() => setSelectedRole(role.id as SignupRole)}
+                    className={`flex-1 rounded-[18px] py-4 px-3 flex-row items-center justify-center ${active ? "bg-white" : ""}`}
+                  >
+                    <Ionicons
+                      name={role.icon as keyof typeof Ionicons.glyphMap}
+                      size={18}
+                      color={active ? "#2B84B1" : "#7C8B95"}
+                    />
+                    <Text className={`ml-2 font-bold ${active ? "text-[#2B84B1]" : "text-[#7C8B95]"}`}>
+                      {role.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
 

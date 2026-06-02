@@ -1,4 +1,4 @@
-import { authStorage } from "@/src/lib/storage";
+import { authStorage, onboardingStorage } from "@/src/lib/storage";
 import { store } from "@/src/store";
 import { useAppDispatch, useAppSelector } from "@/src/store/hooks";
 import {
@@ -32,6 +32,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const isUnauthorizedError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const status = (error as { status?: unknown }).status;
+  return status === 401 || status === "401";
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const { user, isAuthenticated, role } = useAppSelector((state) => state.auth);
@@ -49,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]);
 
         if (storedUser && storedAccess && storedRefresh) {
+          await onboardingStorage.setIntroCompleted();
           dispatch(hydrateAuthState(storedUser));
           setAccessToken(storedAccess);
           setRefreshToken(storedRefresh);
@@ -56,8 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const profile = await store.dispatch(apiSlice.endpoints.getMyProfile.initiate()).unwrap();
             dispatch(hydrateAuthState(profile.data.user));
             await authStorage.setSession(storedAccess, storedRefresh, profile.data.user);
-          } catch {
-            // Keep stored session if live profile fetch fails.
+          } catch (error) {
+            if (isUnauthorizedError(error)) {
+              dispatch(logoutSuccess());
+              setAccessToken(null);
+              setRefreshToken(null);
+              await authStorage.clearSession();
+            }
+            // Keep stored session through transient network/server failures.
           }
         }
       } finally {
@@ -75,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     dispatch(loginSuccess(next.user));
     setAccessToken(next.accessToken);
     setRefreshToken(next.refreshToken);
+    await onboardingStorage.setIntroCompleted();
     await authStorage.setSession(
       next.accessToken,
       next.refreshToken,
@@ -106,17 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setRole = useCallback(async (nextRole: "client" | "provider" | "superAdmin") => {
     dispatch(setAuthRole(nextRole));
-    if (!user || !accessToken || !refreshToken) return;
-
-    const nextUser = { ...user, role: nextRole };
-    await authStorage.setSession(accessToken, refreshToken, nextUser, authStorage.isPersistent());
-
-    try {
-      await store.dispatch(apiSlice.endpoints.updateProfile.initiate({ role: nextRole })).unwrap();
-    } catch {
-      // Keep local role even if backend sync fails.
-    }
-  }, [accessToken, dispatch, refreshToken, user]);
+  }, [dispatch]);
 
   const updateProfile = useCallback(async (payload: Partial<AppUser>) => {
     if (!user || !accessToken || !refreshToken) return;

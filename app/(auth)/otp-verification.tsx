@@ -13,17 +13,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
+import { useAuth } from "@/src/contexts/AuthContext";
 import { useVerifySignupOtpMutation } from "@/src/store/services/apiSlice";
 
 export default function OTPVerificationScreen() {
     const router = useRouter();
-    const { email = "", role = "client", mode = "signup" } = useLocalSearchParams<{ email?: string; role?: string; mode?: string }>();
-    const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+    const { setSession } = useAuth();
+    const { email = "", mode = "signup" } = useLocalSearchParams<{ email?: string; role?: string; mode?: string }>();
+    const [otp, setOtp] = useState(["", "", "", ""]);
     const [timer, setTimer] = useState(60);
     const [verifySignupOtp, { isLoading: loading }] = useVerifySignupOtpMutation();
     const inputRefs = [
-        useRef<TextInput>(null),
-        useRef<TextInput>(null),
         useRef<TextInput>(null),
         useRef<TextInput>(null),
         useRef<TextInput>(null),
@@ -66,16 +66,16 @@ export default function OTPVerificationScreen() {
             return;
         }
 
-        if (!email || otp.join("").length !== 6) {
-            Alert.alert("Invalid OTP", "Please enter the 6 digit verification code.");
+        if (!email || otp.join("").length !== 4) {
+            Alert.alert("Invalid OTP", "Please enter the 4-digit verification code.");
             return;
         }
 
         try {
-            await verifySignupOtp({ email, otp: otp.join("") }).unwrap();
-            router.push({
-                pathname: "/(auth)/otp-success",
-                params: { role },
+            const response = await verifySignupOtp({ email, otp: otp.join("") }).unwrap();
+            await setSession(response.data, { persistent: true });
+            router.replace({
+                pathname: response.data.user.role === "provider" ? "/(provider-tabs)" : "/(tabs)",
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : "OTP verification failed.";
@@ -102,13 +102,13 @@ export default function OTPVerificationScreen() {
                         </Text>
                         <Text className="text-[16px] text-[#7C8B95] text-center mt-4 leading-[24px] px-4 font-medium">
                             {mode === "signup"
-                                ? `Enter the OTP sent to ${email || "your email"} to complete signup`
+                                ? `Enter the 4-digit OTP sent to ${email || "your email"} to complete signup`
                                 : "Enter the otp sent to your email address to reset your old password"}
                         </Text>
                     </View>
 
                     {/* OTP Inputs */}
-                    <View className="flex-row justify-between mb-12">
+                    <View className="flex-row justify-center gap-x-4 mb-12">
                         {otp.map((digit, index) => (
                             <View
                                 key={index}

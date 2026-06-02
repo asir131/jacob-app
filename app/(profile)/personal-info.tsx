@@ -6,7 +6,6 @@ import React from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
+import { UserAvatar } from "@/src/components/UserAvatar";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { resolveAddressFromCoordinates } from "@/src/lib/geocode";
 import {
@@ -297,7 +297,7 @@ export default function PersonalInfoPage() {
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         <View className="items-center mb-8">
           <View className="relative">
-            <Image source={{ uri: form.avatar || "https://i.pravatar.cc/150?u=jacob-user" }} className="w-24 h-24 rounded-full bg-gray-200" />
+            <UserAvatar uri={form.avatar} size={96} />
             <TouchableOpacity onPress={pickImage} className="absolute bottom-0 right-0 w-8 h-8 bg-[#2B84B1] rounded-full flex items-center justify-center border-2 border-white">
               {uploadingAvatar ? <ActivityIndicator color="white" size="small" /> : <Ionicons name="camera" size={14} color="white" />}
             </TouchableOpacity>

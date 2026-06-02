@@ -1,9 +1,11 @@
 import ImageImport from "@/assets/ImageImport";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { onboardingStorage } from "@/src/lib/storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useRef, useState } from "react";
-import { Dimensions, FlatList, Image, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Dimensions, FlatList, Image, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get('window');
@@ -31,8 +33,44 @@ const SLIDES = [
 
 export default function OnboardingScreen() {
     const router = useRouter();
+    const { isAuthenticated, loading, role, user } = useAuth();
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [checkingIntro, setCheckingIntro] = useState(true);
     const flatListRef = useRef<FlatList>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const routeFromSavedState = async () => {
+            if (loading) return;
+
+            if (isAuthenticated && user) {
+                router.replace(role === "provider" ? "/(provider-tabs)" : "/(tabs)");
+                return;
+            }
+
+            const completed = await onboardingStorage.hasCompletedOnboarding();
+            if (!isMounted) return;
+
+            if (completed) {
+                router.replace("/(auth)/login");
+                return;
+            }
+
+            setCheckingIntro(false);
+        };
+
+        void routeFromSavedState();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isAuthenticated, loading, role, router, user]);
+
+    const finishOnboarding = async () => {
+        await onboardingStorage.setIntroCompleted();
+        router.replace('/(auth)/role-selection');
+    };
 
     const handleNext = () => {
         if (currentIndex < SLIDES.length - 1) {
@@ -42,7 +80,7 @@ export default function OnboardingScreen() {
             });
             setCurrentIndex(currentIndex + 1);
         } else {
-            router.push('/(auth)/role-selection');
+            void finishOnboarding();
         }
     };
 
@@ -54,12 +92,18 @@ export default function OnboardingScreen() {
 
     return (
         <SafeAreaView className="flex-1 bg-white">
+            {loading || checkingIntro ? (
+                <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="large" color="#2286BE" />
+                </View>
+            ) : (
+            <>
             <StatusBar style="dark" />
             <Image source={ImageImport.top_buble} className="w-[80px] h-[80px] absolute top-0 left-0" />
             {/* Top Bar */}
             <View className="px-6 flex-row justify-end pt-2 z-10">
                 <TouchableOpacity
-                    onPress={() => router.push('/(auth)/role-selection')}
+                    onPress={() => void finishOnboarding()}
                     className="bg-[#2B84B1] px-5 py-2.5 rounded-full"
                 >
                     <Text className="text-white font-bold text-[15px]">Skip</Text>
@@ -125,6 +169,8 @@ export default function OnboardingScreen() {
                     />
                 </TouchableOpacity>
             </View>
+            </>
+            )}
         </SafeAreaView>
     );
 }

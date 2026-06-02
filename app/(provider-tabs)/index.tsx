@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import { UserAvatar } from "@/src/components/UserAvatar";
 import { formatCurrency } from "@/src/lib/formatters";
 import {
   useAcceptProviderOrderMutation,
@@ -130,7 +131,7 @@ export default function SellerDashboard() {
       <View className="px-6 py-4 flex-row justify-between items-center bg-white shadow-sm shadow-black/5 z-10 w-full">
         <View className="flex-row items-center">
           <View className="relative mr-3">
-            <Image source={{ uri: user?.avatar || "https://i.pravatar.cc/150?u=provider" }} className="w-14 h-14 rounded-full border-2 border-gray-100" />
+            <UserAvatar uri={user?.avatar} size={56} borderColor="#F3F4F6" />
             <View className="absolute bottom-0 right-0 w-4 h-4 bg-[#55A06F] rounded-full border-2 border-white" />
           </View>
           <View>

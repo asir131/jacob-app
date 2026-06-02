@@ -1,6 +1,5 @@
-import { StaticContentScreen } from "@/src/components/StaticContentScreen";
-import { CONTENT_PAGES } from "@/src/data/contentPages";
+import RegisterScreen from "./(auth)/register";
 
 export default function JoinProviderPage() {
-  return <StaticContentScreen page={CONTENT_PAGES.joinProvider} />;
+  return <RegisterScreen initialRole="provider" lockRole />;
 }

@@ -40,14 +40,13 @@ const authSlice = createSlice({
             ? state.user.payoutInfo
             : { ...(state.user.payoutInfo || {}), ...action.payload.payoutInfo },
       };
-      state.role = state.user.role;
+      if (action.payload.role) {
+        state.role = action.payload.role;
+      }
       state.isAuthenticated = true;
     },
     setAuthRole: (state, action: PayloadAction<Role>) => {
       state.role = action.payload;
-      if (state.user) {
-        state.user.role = action.payload;
-      }
     },
     logoutSuccess: (state) => {
       state.user = null;
