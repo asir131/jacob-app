@@ -1,7 +1,7 @@
 import ImageImport from "@/assets/ImageImport";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { ApiError } from "@/src/lib/api";
-import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from "@/src/lib/env";
+import { API_BASE_URL, GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from "@/src/lib/env";
 import { useLoginWithGoogleMutation } from "@/src/store/services/apiSlice";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -60,6 +60,28 @@ const getGoogleSignin = () => {
     return cachedGoogleSignin;
 };
 
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof ApiError) return error.message;
+
+    if (error && typeof error === "object") {
+        const rtkError = error as {
+            data?: { message?: string };
+            error?: string;
+            status?: number | string;
+        };
+
+        if (rtkError.data?.message) return rtkError.data.message;
+
+        if (rtkError.status === "FETCH_ERROR") {
+            return `Network request failed. Mobile app tried ${API_BASE_URL || "an empty API URL"}. Make sure the backend is running and your phone can reach this URL.`;
+        }
+
+        if (rtkError.error) return rtkError.error;
+    }
+
+    return fallback;
+};
+
 export default function LoginScreen() {
     const router = useRouter();
     const { role: requestedRole } = useLocalSearchParams();
@@ -100,7 +122,7 @@ export default function LoginScreen() {
             const user = await loginWithPassword(email.trim(), password, rememberMe);
             router.replace(user.role === "provider" ? "/(provider-tabs)" : "/(tabs)");
         } catch (error) {
-            const message = error instanceof ApiError ? error.message : "Login failed. Please try again.";
+            const message = getApiErrorMessage(error, "Login failed. Please try again.");
             Alert.alert("Sign in failed", message);
         } finally {
             setLoading(false);
@@ -108,12 +130,7 @@ export default function LoginScreen() {
     };
 
     const getGoogleErrorMessage = (error: unknown) => {
-        if (error instanceof ApiError) return error.message;
-        if (error && typeof error === "object" && "data" in error) {
-            const payload = (error as { data?: { message?: string } }).data;
-            if (payload?.message) return payload.message;
-        }
-        return "Please try again.";
+        return getApiErrorMessage(error, "Please try again.");
     };
 
     const handleGoogleSignIn = async () => {

@@ -101,6 +101,7 @@ export type PublicServiceCard = {
   categoryName: string;
   expertType: "solo" | "team";
   image: string;
+  videos?: string[];
   baseCity: string;
   zipCode?: string;
   avgPackagePrice: number;

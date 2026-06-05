@@ -3,10 +3,12 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
+import { API_BASE_URL } from "@/src/lib/env";
 import { formatCurrency } from "@/src/lib/formatters";
 import { extractZipCode, isValidZipCode } from "@/src/lib/zip";
 import {
@@ -15,6 +17,12 @@ import {
   useGetFaqsQuery,
   useGetPublicServicesQuery,
 } from "@/src/store/services/apiSlice";
+
+const normalizeMediaUrl = (url?: string) => {
+  const value = String(url || "").trim();
+  if (!value || !API_BASE_URL) return value;
+  return value.replace(/^http:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2):\d+/i, API_BASE_URL);
+};
 
 const howItWorks = [
   {
@@ -565,15 +573,38 @@ export default function HomePage() {
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-6">
-            {services.map((item, index) => (
+            {services.map((item, index) => {
+              const thumbnailImage = normalizeMediaUrl(item.image);
+              const thumbnailVideo = !thumbnailImage && Array.isArray((item as any).videos) ? normalizeMediaUrl((item as any).videos[0]) : "";
+
+              return (
               <TouchableOpacity
                 key={String(item.id || item.slug || item.title || index)}
                 onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })}
                 className="w-[172px] mr-5"
               >
                 <View className="w-full h-[220px] rounded-3xl overflow-hidden mb-4 bg-gray-100 relative">
-                  {item.image ? (
-                    <Image source={{ uri: item.image }} className="w-full h-full" resizeMode="cover" />
+                  {thumbnailImage ? (
+                    <Image source={{ uri: thumbnailImage }} className="w-full h-full" resizeMode="cover" />
+                  ) : thumbnailVideo ? (
+                    <>
+                      <WebView
+                        originWhitelist={["*"]}
+                        allowsInlineMediaPlayback
+                        mixedContentMode="always"
+                        mediaPlaybackRequiresUserAction={false}
+                        scrollEnabled={false}
+                        source={{
+                          html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;background:#000;"><video src="${thumbnailVideo}" muted playsinline preload="metadata" style="width:100%;height:100vh;object-fit:cover;background:#000;"></video></body></html>`,
+                        }}
+                        className="w-full h-full bg-black"
+                      />
+                      <View className="absolute inset-0 items-center justify-center bg-black/20">
+                        <View className="h-11 w-11 rounded-full bg-white/90 items-center justify-center">
+                          <Ionicons name="play" size={22} color="#2286BE" />
+                        </View>
+                      </View>
+                    </>
                   ) : (
                     <View className="w-full h-full items-center justify-center">
                       <Ionicons name="image-outline" size={32} color="#94A3B8" />
@@ -591,7 +622,8 @@ export default function HomePage() {
                 </View>
                 <Text className="text-[13px] text-[#7C8B95] mt-1">{formatCurrency(item.avgPackagePrice)}</Text>
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </ScrollView>
         </View>
 

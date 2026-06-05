@@ -43,8 +43,20 @@ export default function ServiceDetailsPage() {
   const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
   const activePackage = useMemo(() => service?.packages?.[selectedPackage] || null, [selectedPackage, service]);
-  const images = useMemo(() => (Array.isArray(service?.images) && service.images.length ? service.images : []), [service?.images]);
-  const videos = useMemo(() => (Array.isArray((service as any)?.videos) ? (service as any).videos : []), [service]);
+  const normalizeMediaUrl = (url: string) => {
+    const value = String(url || "").trim();
+    if (!value) return "";
+    if (!API_BASE_URL) return value;
+    return value.replace(/^http:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2):\d+/i, API_BASE_URL);
+  };
+  const images = useMemo(
+    () => (Array.isArray(service?.images) && service.images.length ? service.images.map(normalizeMediaUrl).filter(Boolean) : []),
+    [service?.images]
+  );
+  const videos = useMemo(
+    () => (Array.isArray((service as any)?.videos) ? (service as any).videos.map(normalizeMediaUrl).filter(Boolean) : []),
+    [service]
+  );
   const mediaItems = useMemo(
     () => [
       ...images.map((url) => ({ type: "image" as const, url })),
@@ -214,8 +226,10 @@ export default function ServiceDetailsPage() {
         <View className="relative w-full h-[340px] bg-slate-100">
           {activeMedia?.type === "video" ? (
             <WebView
+              originWhitelist={["*"]}
               allowsFullscreenVideo
               allowsInlineMediaPlayback
+              mixedContentMode="always"
               mediaPlaybackRequiresUserAction={false}
               source={{
                 html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;background:#000;"><video src="${activeMedia.url}" controls playsinline style="width:100%;height:100vh;object-fit:contain;background:#000;"></video></body></html>`,

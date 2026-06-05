@@ -10,10 +10,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { formatMilesFromKm, milesToKm } from "@/src/lib/distance";
+import { API_BASE_URL } from "@/src/lib/env";
 import { formatCurrency } from "@/src/lib/formatters";
 import { useAppSelector } from "@/src/store/hooks";
 import { useGetPublicServicesQuery } from "@/src/store/services/apiSlice";
@@ -32,6 +34,12 @@ const slugifySearchTerm = (value: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+const normalizeMediaUrl = (url?: string) => {
+  const value = String(url || "").trim();
+  if (!value || !API_BASE_URL) return value;
+  return value.replace(/^http:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2):\d+/i, API_BASE_URL);
+};
 
 export default function ServicesPage() {
   const router = useRouter();
@@ -138,15 +146,38 @@ export default function ServicesPage() {
         </ScrollView>
 
         {services.length ? (
-          services.map((item) => (
+          services.map((item) => {
+            const thumbnailImage = normalizeMediaUrl(item.image);
+            const thumbnailVideo = !thumbnailImage && Array.isArray(item.videos) ? normalizeMediaUrl(item.videos[0]) : "";
+
+            return (
             <TouchableOpacity
               key={item.id}
               onPress={() => router.push({ pathname: "/service-details", params: { id: item.id } })}
               className="mb-6 mx-6 rounded-[28px] bg-white border border-gray-100 shadow-sm shadow-black/5 overflow-hidden"
             >
               <View className="relative w-full h-[220px] bg-slate-100">
-                {item.image ? (
-                  <Image source={{ uri: item.image }} className="w-full h-full" resizeMode="cover" />
+                {thumbnailImage ? (
+                  <Image source={{ uri: thumbnailImage }} className="w-full h-full" resizeMode="cover" />
+                ) : thumbnailVideo ? (
+                  <>
+                    <WebView
+                      originWhitelist={["*"]}
+                      allowsInlineMediaPlayback
+                      mixedContentMode="always"
+                      mediaPlaybackRequiresUserAction={false}
+                      scrollEnabled={false}
+                      source={{
+                        html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;background:#000;"><video src="${thumbnailVideo}" muted playsinline preload="metadata" style="width:100%;height:100vh;object-fit:cover;background:#000;"></video></body></html>`,
+                      }}
+                      className="w-full h-full bg-black"
+                    />
+                    <View className="absolute inset-0 items-center justify-center bg-black/20">
+                      <View className="h-12 w-12 rounded-full bg-white/90 items-center justify-center">
+                        <Ionicons name="play" size={24} color="#2286BE" />
+                      </View>
+                    </View>
+                  </>
                 ) : (
                   <View className="w-full h-full items-center justify-center">
                     <Ionicons name="image-outline" size={42} color="#94A3B8" />
@@ -197,7 +228,8 @@ export default function ServicesPage() {
                 </View>
               </View>
             </TouchableOpacity>
-          ))
+            );
+          })
         ) : (
           isLoading || isFetching ? (
             <View className="items-center justify-center py-20">
