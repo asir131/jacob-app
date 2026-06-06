@@ -9,7 +9,7 @@ import { KeyboardAwareScrollView as ScrollView } from "@/src/components/Keyboard
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { API_BASE_URL } from "@/src/lib/env";
-import { formatCurrency } from "@/src/lib/formatters";
+import { formatCurrency, formatTimeLabel } from "@/src/lib/formatters";
 import { extractZipCode, isValidZipCode } from "@/src/lib/zip";
 import {
   useGetClientDashboardQuery,
@@ -59,15 +59,15 @@ const testimonials = [
 
 const formatRecentTime = (scheduledDate?: string, scheduledTime?: string) => {
   if (!scheduledDate && !scheduledTime) return "Schedule pending";
-  if (!scheduledDate) return scheduledTime || "Schedule pending";
+  if (!scheduledDate) return scheduledTime ? formatTimeLabel(scheduledTime) : "Schedule pending";
   const date = new Date(scheduledDate);
-  if (Number.isNaN(date.getTime())) return scheduledTime || scheduledDate;
+  if (Number.isNaN(date.getTime())) return scheduledTime ? formatTimeLabel(scheduledTime) : scheduledDate;
   const formattedDate = date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
-  return scheduledTime ? `${formattedDate}, ${scheduledTime}` : formattedDate;
+  return scheduledTime ? `${formattedDate}, ${formatTimeLabel(scheduledTime)}` : formattedDate;
 };
 
 const slugifySearchTerm = (value: string) =>

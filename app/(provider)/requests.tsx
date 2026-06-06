@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
-import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
+import { formatCurrency, formatDateLabel, formatTimeLabel } from "@/src/lib/formatters";
 import { formatMilesFromKm } from "@/src/lib/distance";
 import {
   useAcceptServiceRequestMutation,
@@ -24,6 +24,13 @@ import {
   useRespondToAdminServiceRequestInvitationMutation,
 } from "@/src/store/services/apiSlice";
 import type { ServiceRequestSummary } from "@/src/types/api";
+
+const ADMIN_INVITATION_ALREADY_HANDLED_MESSAGE = "This admin invitation is already handled.";
+
+const getApiErrorMessage = (error: unknown) => {
+  const message = (error as { data?: { message?: unknown } })?.data?.message;
+  return typeof message === "string" ? message : error instanceof Error ? error.message : "Please try again.";
+};
 
 export default function ProviderRequestsPage() {
   const router = useRouter();
@@ -47,8 +54,34 @@ export default function ProviderRequestsPage() {
   const [acceptServiceRequest, { isLoading: accepting }] = useAcceptServiceRequestMutation();
   const [ignoreServiceRequest, { isLoading: ignoring }] = useIgnoreServiceRequestMutation();
   const [respondToAdminInvitation, { isLoading: respondingAdminInvitation }] = useRespondToAdminServiceRequestInvitationMutation();
-  const items = (data?.data.items || []) as ServiceRequestSummary[];
+  const items = ((data?.data.items || []) as ServiceRequestSummary[]).filter(
+    (item) => !item.adminRequestedForViewer || item.adminInvitationStatus === "pending"
+  );
   const pagination = data?.data.pagination;
+
+  const openNegotiationChat = (conversationId: string, item: ServiceRequestSummary) => {
+    router.push({
+      pathname: "/chat-details",
+      params: {
+        conversationId,
+        serviceRequestId: item.id,
+        requestNumber: item.requestNumber || "",
+        requestCategoryName: item.categoryName || "",
+        serviceAddress: item.serviceAddress || "",
+        preferredDate: item.preferredDate || "",
+        preferredTime: item.preferredTime || "",
+        budget: String(item.budget || ""),
+        name: item.client.name || "Client",
+        avatar: item.client.avatar || "",
+        info: item.requestNumber
+          ? `${item.requestNumber} - ${item.categoryName || "Service request"}`
+          : item.categoryName || "Service request",
+        role: "provider",
+        targetUserId: item.client.id || "",
+        targetUserRole: "client",
+      },
+    });
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -88,14 +121,7 @@ export default function ProviderRequestsPage() {
       if (item.adminRequestedForViewer) {
         const payload = await respondToAdminInvitation({ id: item.id, action: "accept" }).unwrap();
         if (payload.data?.conversationId) {
-          router.push({
-            pathname: "/chat-details",
-            params: {
-              conversationId: payload.data.conversationId,
-              name: item.client.name || "Client",
-              role: "provider",
-            },
-          });
+          openNegotiationChat(payload.data.conversationId, item);
           return;
         }
       } else {
@@ -104,7 +130,12 @@ export default function ProviderRequestsPage() {
       refetch();
       Alert.alert("Accepted", item.adminRequestedForViewer ? "Negotiation started with the client." : "Service request accepted successfully.");
     } catch (error) {
-      Alert.alert("Accept failed", error instanceof Error ? error.message : "Please try again.");
+      const message = getApiErrorMessage(error);
+      if (message === ADMIN_INVITATION_ALREADY_HANDLED_MESSAGE) {
+        void refetch();
+        return;
+      }
+      Alert.alert("Accept failed", message);
     } finally {
       setActingRequestId(null);
     }
@@ -120,7 +151,12 @@ export default function ProviderRequestsPage() {
       }
       refetch();
     } catch (error) {
-      Alert.alert("Ignore failed", error instanceof Error ? error.message : "Please try again.");
+      const message = getApiErrorMessage(error);
+      if (message === ADMIN_INVITATION_ALREADY_HANDLED_MESSAGE) {
+        void refetch();
+        return;
+      }
+      Alert.alert("Ignore failed", message);
     } finally {
       setActingRequestId(null);
     }
@@ -224,7 +260,7 @@ export default function ProviderRequestsPage() {
                     <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
                       <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred</Text>
                       <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">
-                        {formatDateLabel(item.preferredDate)} • {item.preferredTime}
+                        {formatDateLabel(item.preferredDate)} • {formatTimeLabel(item.preferredTime)}
                       </Text>
                     </View>
                   </View>

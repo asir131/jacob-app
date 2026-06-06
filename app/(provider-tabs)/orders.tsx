@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   Platform,
   RefreshControl,
@@ -14,7 +15,13 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
-import { formatCurrency, formatDateLabel, formatStatusLabel } from "@/src/lib/formatters";
+import {
+  formatCurrency,
+  formatDateLabel,
+  formatStatusLabel,
+  formatTimeLabel,
+  sortOrdersByScheduledAppointment,
+} from "@/src/lib/formatters";
 import {
   useAcceptProviderOrderMutation,
   useDeclineProviderOrderMutation,
@@ -33,6 +40,13 @@ const filters = [
   { id: "completed", label: "Completed" },
   { id: "declined", label: "Cancelled" },
 ];
+
+const ADMIN_INVITATION_ALREADY_HANDLED_MESSAGE = "This admin invitation is already handled.";
+
+const getApiErrorMessage = (error: unknown) => {
+  const message = (error as { data?: { message?: unknown } })?.data?.message;
+  return typeof message === "string" ? message : error instanceof Error ? error.message : "Please try again.";
+};
 
 export default function ProviderOrders() {
   const router = useRouter();
@@ -85,11 +99,17 @@ export default function ProviderOrders() {
   const [respondProviderRevision, { isLoading: respondingRevision }] = useRespondProviderRevisionMutation();
   const [respondToAdminInvitation, { isLoading: respondingAdminInvitation }] =
     useRespondToAdminServiceRequestInvitationMutation();
-  const orders = useMemo(() => ((data?.data.items || []) as OrderSummary[]), [data?.data.items]);
+  const orders = useMemo(
+    () => sortOrdersByScheduledAppointment((data?.data.items || []) as OrderSummary[]),
+    [data?.data.items]
+  );
   const adminRequestedOrders = useMemo(
     () =>
       (((requestsData?.data.items || []) as ServiceRequestSummary[]).filter(
-        (item) => item.adminRequestedForViewer && !item.assignedToOtherProvider
+        (item) =>
+          item.adminRequestedForViewer &&
+          item.adminInvitationStatus === "pending" &&
+          !item.assignedToOtherProvider
       ) || []),
     [requestsData?.data.items]
   );
@@ -170,22 +190,46 @@ export default function ProviderOrders() {
     refetch();
   };
 
-  const handleAdminRequestResponse = async (requestId: string, action: "accept" | "decline", clientName?: string) => {
+  const openNegotiationChat = (conversationId: string, request: ServiceRequestSummary) => {
+    router.push({
+      pathname: "/chat-details",
+      params: {
+        conversationId,
+        serviceRequestId: request.id,
+        requestNumber: request.requestNumber || "",
+        requestCategoryName: request.categoryName || "",
+        serviceAddress: request.serviceAddress || "",
+        preferredDate: request.preferredDate || "",
+        preferredTime: request.preferredTime || "",
+        budget: String(request.budget || ""),
+        name: request.client.name || "Client",
+        avatar: request.client.avatar || "",
+        info: request.requestNumber
+          ? `${request.requestNumber} - ${request.categoryName || "Service request"}`
+          : request.categoryName || "Service request",
+        role: "provider",
+        targetUserId: request.client.id || "",
+        targetUserRole: "client",
+      },
+    });
+  };
+
+  const handleAdminRequestResponse = async (request: ServiceRequestSummary, action: "accept" | "decline") => {
     try {
-      setActingRequestId(requestId);
-      const payload = await respondToAdminInvitation({ id: requestId, action }).unwrap();
+      setActingRequestId(request.id);
+      const payload = await respondToAdminInvitation({ id: request.id, action }).unwrap();
       await refetchRequests();
       if (action === "accept" && payload.data?.conversationId) {
-        router.push({
-          pathname: "/chat-details",
-          params: {
-            conversationId: payload.data.conversationId,
-            name: clientName || "Client",
-            role: "provider",
-          },
-        });
+        openNegotiationChat(payload.data.conversationId, request);
         return;
       }
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      if (message === ADMIN_INVITATION_ALREADY_HANDLED_MESSAGE) {
+        await refetchRequests();
+        return;
+      }
+      Alert.alert("Request update failed", message);
     } finally {
       setActingRequestId(null);
     }
@@ -334,13 +378,13 @@ export default function ProviderOrders() {
                     <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mt-4">
                       <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred Time</Text>
                       <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">
-                        {formatDateLabel(request.preferredDate)} • {request.preferredTime}
+                        {formatDateLabel(request.preferredDate)} • {formatTimeLabel(request.preferredTime)}
                       </Text>
                     </View>
 
                     <View className="flex-row mt-5">
                       <TouchableOpacity
-                        onPress={() => void handleAdminRequestResponse(request.id, "decline", request.client.name)}
+                        onPress={() => void handleAdminRequestResponse(request, "decline")}
                         disabled={respondingAdminInvitation && actingRequestId === request.id}
                         className="flex-1 mr-3 bg-[#F8FAFC] rounded-[18px] py-4 items-center"
                       >
@@ -351,7 +395,7 @@ export default function ProviderOrders() {
                         )}
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => void handleAdminRequestResponse(request.id, "accept", request.client.name)}
+                        onPress={() => void handleAdminRequestResponse(request, "accept")}
                         disabled={respondingAdminInvitation && actingRequestId === request.id}
                         className="flex-1 bg-[#2286BE] rounded-[18px] py-4 items-center"
                       >
@@ -424,7 +468,7 @@ export default function ProviderOrders() {
                   <View className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 mt-4">
                     <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Schedule</Text>
                     <Text className="text-[14px] font-bold text-[#1A2C42] mt-2">
-                      {formatDateLabel(order.scheduledDate)} • {order.scheduledTime || "Flexible"}
+                      {formatDateLabel(order.scheduledDate)} • {formatTimeLabel(order.scheduledTime)}
                     </Text>
                     <Text className="text-[13px] text-[#7C8B95] mt-2">{order.serviceAddress || "Location unavailable"}</Text>
                   </View>

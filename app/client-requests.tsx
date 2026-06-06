@@ -5,7 +5,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, 
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
-import { formatCurrency, formatDateLabel } from "@/src/lib/formatters";
+import { formatCurrency, formatDateLabel, formatTimeLabel } from "@/src/lib/formatters";
 import { useGetClientServiceRequestsQuery, useGetConversationsQuery } from "@/src/store/services/apiSlice";
 
 const STATUS_OPTIONS = ["all", "open", "accepted", "cancelled"] as const;
@@ -159,7 +159,7 @@ export default function ClientRequestsPage() {
                   </View>
                   <View className="flex-row justify-between mt-4">
                     <Text className="text-[13px] font-bold text-[#2286BE]">{formatCurrency(item.budget)}</Text>
-                    <Text className="text-[13px] text-[#7C8B95]">{formatDateLabel(item.preferredDate)} • {item.preferredTime}</Text>
+                    <Text className="text-[13px] text-[#7C8B95]">{formatDateLabel(item.preferredDate)} • {formatTimeLabel(item.preferredTime)}</Text>
                   </View>
                   {item.acceptedProvider?.name ? (
                     <Text className="text-[14px] font-bold text-[#1A2C42] mt-4">Accepted By: {item.acceptedProvider.name}</Text>

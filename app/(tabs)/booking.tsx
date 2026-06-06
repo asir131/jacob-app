@@ -597,7 +597,7 @@ function RequestedOrderCard({
           <View className="flex-1 bg-[#F8FAFC] rounded-[18px] px-4 py-4">
             <Text className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#94A3B8]">Preferred Time</Text>
             <Text className="text-[15px] font-bold text-[#1A2C42] mt-2">
-              {formatDateLabel(item.preferredDate)}, {item.preferredTime}
+              {formatDateLabel(item.preferredDate)}, {formatTimeLabel(item.preferredTime)}
             </Text>
           </View>
         </View>

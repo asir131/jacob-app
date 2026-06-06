@@ -28,6 +28,7 @@ import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollVie
 import {
   SchedulePickerFields,
   isFutureSchedule,
+  toDateInputValue,
   toScheduleTimeLabel,
 } from "@/src/components/SchedulePickerFields";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -204,8 +205,15 @@ export default function ChatDetailsPage() {
   const params = useLocalSearchParams<{
     conversationId?: string;
     orderId?: string;
+    serviceRequestId?: string;
+    requestNumber?: string;
+    requestCategoryName?: string;
     sourceOrderId?: string;
     proposalType?: string;
+    serviceAddress?: string;
+    preferredDate?: string;
+    preferredTime?: string;
+    budget?: string;
     name?: string;
     avatar?: string;
     info?: string;
@@ -261,8 +269,15 @@ export default function ChatDetailsPage() {
 
   const conversationIdParam = readParam(params.conversationId);
   const orderId = readParam(params.orderId);
+  const serviceRequestIdParam = readParam(params.serviceRequestId);
+  const requestNumberParam = readParam(params.requestNumber);
+  const requestCategoryNameParam = readParam(params.requestCategoryName);
   const sourceOrderIdParam = readParam(params.sourceOrderId);
   const proposalTypeParam = readParam(params.proposalType);
+  const serviceAddressParam = readParam(params.serviceAddress);
+  const preferredDateParam = readParam(params.preferredDate);
+  const preferredTimeParam = readParam(params.preferredTime);
+  const budgetParam = readParam(params.budget);
   const nameParam = readParam(params.name);
   const avatar = readParam(params.avatar);
   const info = readParam(params.info);
@@ -297,6 +312,8 @@ export default function ChatDetailsPage() {
     selectedConversation?.packageTitle ||
     selectedConversation?.orderName ||
     selectedConversation?.categoryName ||
+    requestCategoryNameParam ||
+    requestNumberParam ||
     selectedConversation?.otherUser?.email ||
     "";
   const targetUserId = targetUserIdParam || selectedConversation?.otherUser?.id || incomingCall?.senderId || "";
@@ -367,6 +384,11 @@ export default function ChatDetailsPage() {
   }, [conversationIdParam]);
 
   useEffect(() => {
+    if (!conversationIdParam) return;
+    void refetchConversations();
+  }, [conversationIdParam, refetchConversations]);
+
+  useEffect(() => {
     if (conversationIdParam || !orderId) return;
 
     let active = true;
@@ -403,6 +425,39 @@ export default function ChatDetailsPage() {
   useEffect(() => {
     setBlockedBy(selectedConversation?.blockedBy || null);
   }, [selectedConversation?.blockedBy]);
+
+  useEffect(() => {
+    const isServiceRequestChat = Boolean(serviceRequestIdParam || selectedConversation?.serviceRequestId);
+    if (!isServiceRequestChat || isRepeatProposalMode) return;
+
+    const defaultTitle = selectedConversation?.categoryName || requestCategoryNameParam;
+    if (defaultTitle) {
+      setProposalTitle((current) => current || defaultTitle);
+    }
+    setProposalAddress((current) => current || serviceAddressParam);
+    setProposalTime((current) => current || preferredTimeParam);
+
+    if (budgetParam) {
+      setProposalPrice((current) => current || budgetParam);
+    }
+
+    if (preferredDateParam) {
+      const parsedDate = new Date(preferredDateParam);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        setProposalDate((current) => current || toDateInputValue(parsedDate));
+      }
+    }
+  }, [
+    budgetParam,
+    isRepeatProposalMode,
+    preferredDateParam,
+    preferredTimeParam,
+    requestCategoryNameParam,
+    selectedConversation?.categoryName,
+    selectedConversation?.serviceRequestId,
+    serviceAddressParam,
+    serviceRequestIdParam,
+  ]);
 
   useEffect(() => {
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 120);
