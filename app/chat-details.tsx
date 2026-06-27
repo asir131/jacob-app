@@ -695,65 +695,6 @@ export default function ChatDetailsPage() {
     otherTracks.forEach((track) => peer.addTrack(track, stream));
   }, []);
 
-  const startOutgoingCall = useCallback(
-    async (callType: CallType) => {
-      if (!conversationId || !targetUserId || !socket) {
-        Alert.alert("Call unavailable", "We could not find the other participant for this chat yet.");
-        return;
-      }
-
-      if (!canStartCalls) {
-        Alert.alert("Call unavailable", "Audio and video calls are not available with admin support.");
-        return;
-      }
-
-      try {
-        resetCallState();
-        setActiveCall(callType);
-        setCallStatus("connecting");
-
-        const stream = prepareLocalStreamForCall(await createLocalStream(callType), callType);
-        localStreamRef.current = stream;
-        setLocalStreamUrl(stream.toURL());
-        startCallAudioRoute(callType);
-
-        const peer = createPeerConnection();
-        peerRef.current = peer;
-        activeCallRef.current = {
-          conversationId,
-          targetUserId,
-          callType,
-        };
-
-        addLocalTracksToPeer(peer, stream);
-        attachPeerListeners(peer, callType);
-
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-
-        socket.emit("call:invite", {
-          conversationId,
-          targetUserId,
-          callType,
-          offer,
-          senderName:
-            user?.firstName || user?.lastName
-              ? `${user?.firstName || ""} ${user?.lastName || ""}`.trim()
-              : user?.email || "User",
-          senderAvatar: user?.avatar || "",
-        } satisfies CallInvitePayload);
-
-        setCallStatus("ringing");
-      } catch (error) {
-        resetCallState();
-        const message = error instanceof Error ? error.message : "Could not start the call.";
-        setCallError(message);
-        Alert.alert("Call failed", message);
-      }
-    },
-    [addLocalTracksToPeer, attachPeerListeners, canStartCalls, conversationId, createLocalStream, prepareLocalStreamForCall, resetCallState, socket, startCallAudioRoute, targetUserId, user?.avatar, user?.email, user?.firstName, user?.lastName]
-  );
-
   const acceptIncomingCall = useCallback(async () => {
     if (!incomingCall || !socket) return;
 
@@ -886,14 +827,15 @@ export default function ChatDetailsPage() {
         (payload.senderId && payload.senderId === targetUserId);
 
       if (!isRelevantConversation) return;
-      if (payload.senderRole === "superAdmin" || !canStartCalls) {
-        resetCallState();
-        return;
+      if (payload.senderId) {
+        socket.emit("call:end", {
+          conversationId: payload.conversationId,
+          targetUserId: payload.senderId,
+          callType: payload.callType,
+          reason: "unavailable",
+        });
       }
       resetCallState();
-      setIncomingCall(payload);
-      setActiveCall(payload.callType);
-      setCallStatus("ringing");
     };
 
     const handleSignal = async (payload: CallSignalPayload) => {
@@ -1170,22 +1112,6 @@ export default function ChatDetailsPage() {
           </View>
 
           <View className="flex-row items-center">
-            {canStartCalls ? (
-              <>
-                <TouchableOpacity
-                  onPress={() => void startOutgoingCall("voice")}
-                  className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
-                >
-                  <Ionicons name="call" size={20} color="#2286BE" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => void startOutgoingCall("video")}
-                  className="w-11 h-11 rounded-full bg-[#EAF3FA] items-center justify-center mr-2"
-                >
-                  <Ionicons name="videocam" size={21} color="#2286BE" />
-                </TouchableOpacity>
-              </>
-            ) : null}
             <TouchableOpacity
               onPress={() => setMenuOpen(true)}
               className="w-11 h-11 rounded-full bg-[#F8FAFC] items-center justify-center"

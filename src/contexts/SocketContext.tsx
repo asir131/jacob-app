@@ -8,10 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { router } from "expo-router";
 import { io, type Socket } from "socket.io-client";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/contexts/AuthContext";
 import { SOCKET_URL } from "@/src/lib/env";
@@ -170,10 +167,18 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     socket.on("call:invite", (payload: CallInvitePayload) => {
-      if (!payload?.conversationId || payload.senderRole === "superAdmin") return;
+      if (!payload?.conversationId) return;
+      if (payload.senderId) {
+        socket.emit("call:end", {
+          conversationId: payload.conversationId,
+          targetUserId: payload.senderId,
+          callType: payload.callType,
+          reason: "unavailable",
+        });
+      }
       acceptedIncomingCallRef.current = null;
       void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
-      setIncomingCall(payload);
+      setIncomingCall(null);
     });
 
     socket.on("call:signal", (payload: CallSignalPayload) => {
@@ -224,35 +229,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     };
   }, [accessToken, dispatch, isAuthenticated, updateProfile]);
 
-  const acceptIncomingCall = useCallback(async () => {
-    if (!incomingCall) return;
-    await AsyncStorage.setItem(PENDING_INCOMING_CALL_STORAGE_KEY, JSON.stringify(incomingCall));
-    acceptedIncomingCallRef.current = incomingCall;
-    setIncomingCall(null);
-    router.replace({
-      pathname: "/chat-details",
-      params: {
-        conversationId: incomingCall.conversationId,
-        incomingCall: "1",
-        autoAcceptIncomingCall: "1",
-      },
-    });
-  }, [incomingCall]);
-
-  const cancelIncomingCall = useCallback(() => {
-    if (incomingCall?.senderId && socketRef.current) {
-      socketRef.current.emit("call:end", {
-        conversationId: incomingCall.conversationId,
-        targetUserId: incomingCall.senderId,
-        callType: incomingCall.callType,
-        reason: "declined",
-      });
-    }
-    setIncomingCall(null);
-    acceptedIncomingCallRef.current = null;
-    void AsyncStorage.removeItem(PENDING_INCOMING_CALL_CANDIDATES_STORAGE_KEY);
-  }, [incomingCall]);
-
   const unreadCount = useMemo(
     () => notifications.filter((item) => item.unread).length,
     [notifications]
@@ -279,151 +255,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-      <Modal visible={Boolean(incomingCall)} transparent animationType="fade" onRequestClose={cancelIncomingCall}>
-        <View style={styles.callOverlay}>
-          <View style={styles.callCard}>
-            <View style={styles.callHeader}>
-              <View style={styles.callHeaderRow}>
-                <View style={styles.callIconWrap}>
-                  <Ionicons
-                    name={incomingCall?.callType === "video" ? "videocam" : "call"}
-                    size={28}
-                    color="#fff"
-                  />
-                </View>
-                <View style={styles.callTitleWrap}>
-                  <Text style={styles.callEyebrow}>
-                    Incoming {incomingCall?.callType === "video" ? "Video" : "Voice"} Call
-                  </Text>
-                  <Text style={styles.callTitle} numberOfLines={2}>
-                    {incomingCall?.senderName || "Someone"} is calling
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.callBody}>
-              <Text style={styles.callMessage}>
-                Receive to open the conversation and connect the call.
-              </Text>
-              <View style={styles.callActions}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={cancelIncomingCall}
-                  style={[styles.callButton, styles.declineButton]}
-                >
-                  <Text style={styles.declineButtonText}>Decline</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={acceptIncomingCall}
-                  style={[styles.callButton, styles.receiveButton]}
-                >
-                  <Text style={styles.receiveButtonText}>Receive</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SocketContext.Provider>
   );
 }
-
-const styles = StyleSheet.create({
-  callOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(2, 6, 23, 0.72)",
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-  },
-  callCard: {
-    width: "100%",
-    maxWidth: 360,
-    overflow: "hidden",
-    borderRadius: 28,
-    backgroundColor: "#fff",
-  },
-  callHeader: {
-    backgroundColor: "#2286BE",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  callHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  callIconWrap: {
-    width: 56,
-    height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
-    marginRight: 14,
-  },
-  callTitleWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  callEyebrow: {
-    color: "rgba(255, 255, 255, 0.75)",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-  },
-  callTitle: {
-    marginTop: 4,
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
-    lineHeight: 28,
-  },
-  callBody: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  callMessage: {
-    color: "#475569",
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  callActions: {
-    flexDirection: "row",
-    marginTop: 18,
-  },
-  callButton: {
-    flex: 1,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-  },
-  declineButton: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#fff",
-    marginRight: 10,
-  },
-  receiveButton: {
-    backgroundColor: "#10B981",
-    marginLeft: 10,
-  },
-  declineButtonText: {
-    color: "#475569",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  receiveButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-});
 
 export function useSocketNotifications() {
   const context = useContext(SocketContext);

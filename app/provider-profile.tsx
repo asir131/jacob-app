@@ -2,18 +2,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UserAvatar } from "@/src/components/UserAvatar";
+import { useAuth } from "@/src/contexts/AuthContext";
 import { formatCurrency } from "@/src/lib/formatters";
-import { useGetPublicProviderProfileQuery } from "@/src/store/services/apiSlice";
+import {
+  useGetPublicProviderProfileQuery,
+  useStartProviderConversationMutation,
+} from "@/src/store/services/apiSlice";
 
 export default function ProviderProfilePage() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id = "" } = useLocalSearchParams<{ id?: string }>();
+  const { isAuthenticated, role } = useAuth();
   const [reviewFilter, setReviewFilter] = useState(0);
   const { data, isLoading } = useGetPublicProviderProfileQuery(id, { skip: !id });
+  const [startProviderConversation, { isLoading: isContactingProvider }] = useStartProviderConversationMutation();
 
   const provider = data?.data.provider;
   const gigs = data?.data.gigs || [];
@@ -40,6 +47,45 @@ export default function ProviderProfilePage() {
   }
 
   const providerName = provider.name || `${provider.firstName || ""} ${provider.lastName || ""}`.trim() || "Provider";
+  const primaryGigId = String(gigs[0]?.id || "");
+
+  const handleContactProvider = async () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign in required", "Please sign in before contacting this professional.");
+      router.push("/(auth)/login");
+      return;
+    }
+    if (role !== "client") {
+      Alert.alert("Switch to buyer mode", "Contacting professionals is available only in buyer mode.");
+      return;
+    }
+    if (!id || !primaryGigId) {
+      Alert.alert("Contact unavailable", "This provider does not have an active service to contact about yet.");
+      return;
+    }
+
+    try {
+      const payload = await startProviderConversation({
+        providerId: id,
+        gigId: primaryGigId,
+      }).unwrap();
+      const conversation = payload.data?.conversation;
+      const conversationId = String(conversation?.id || "");
+      if (!conversationId) throw new Error("Conversation could not be opened.");
+      router.push({
+        pathname: "/chat-details",
+        params: {
+          conversationId,
+          name: conversation?.otherUser?.name || providerName,
+          avatar: conversation?.otherUser?.avatar || provider.avatar || "",
+          info: gigs[0]?.title || "Provider chat",
+          targetUserId: conversation?.otherUser?.id || id,
+        },
+      });
+    } catch (error) {
+      Alert.alert("Could not contact professional", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
@@ -50,7 +96,7 @@ export default function ProviderProfilePage() {
         <Text className="text-[20px] font-bold text-[#1A2C42] flex-1">Provider Profile</Text>
       </View>
 
-      <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 20, paddingBottom: 120 }}>
+      <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}>
         <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5 mb-8">
           <View className="items-center">
             <UserAvatar uri={provider.avatar} size={110} className="mb-4" />
@@ -69,6 +115,20 @@ export default function ProviderProfilePage() {
             <StatCard label="Completed" value={`${provider.completedOrders || 0}`} />
             <StatCard label="Recommend" value={`${Math.round(Number(provider.recommendRate || provider.completionRate || 0))}%`} />
           </View>
+          <TouchableOpacity
+            onPress={() => void handleContactProvider()}
+            disabled={isContactingProvider}
+            className="mt-5 flex-row items-center justify-center rounded-[20px] bg-[#1A2C42] py-5"
+          >
+            {isContactingProvider ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color="white" />
+                <Text className="ml-2 text-white font-black text-[15px]">Contact Professional</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
         <Section title="About">
@@ -148,6 +208,25 @@ export default function ProviderProfilePage() {
           )}
         </Section>
       </ScrollView>
+      <View
+        className="absolute bottom-0 w-full bg-white px-6 pt-4 border-t border-gray-100"
+        style={{ paddingBottom: Math.max(insets.bottom + 18, 28) }}
+      >
+        <TouchableOpacity
+          onPress={() => void handleContactProvider()}
+          disabled={isContactingProvider}
+          className="flex-row items-center justify-center rounded-[20px] bg-[#1A2C42] py-5 shadow-sm shadow-black/10"
+        >
+          {isContactingProvider ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color="white" />
+              <Text className="ml-2 text-white font-black text-[15px]">Contact Professional</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }

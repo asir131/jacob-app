@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -43,7 +44,7 @@ const normalizeMediaUrl = (url?: string) => {
 
 export default function ServicesPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { role, setRole, user } = useAuth();
   const { title, categorySlug } = useLocalSearchParams<{ title?: string; categorySlug?: string }>();
   const location = useAppSelector((state) => state.location);
   const [search, setSearch] = useState("");
@@ -62,7 +63,8 @@ export default function ServicesPage() {
     lng: typeof user?.locationLng === "number" ? user.locationLng : location.coordinates?.lng ?? null,
   };
 
-  const { data, isLoading, isFetching, error } = useGetPublicServicesQuery(queryArgs);
+  const isProviderMode = role === "provider";
+  const { data, isLoading, isFetching, error } = useGetPublicServicesQuery(isProviderMode ? skipToken : queryArgs);
   const rawServices = useMemo(() => ((data?.data.items || []) as PublicServiceCard[]), [data?.data.items]);
   const services = useMemo(() => {
     return rawServices.filter((item) => {
@@ -75,6 +77,32 @@ export default function ServicesPage() {
   }, [minRating, providerType, rawServices]);
   const screenTitle = useMemo(() => title || "Services", [title]);
   const pagination = data?.data.pagination;
+
+  if (isProviderMode) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8" edges={["top"]}>
+        <View className="w-20 h-20 rounded-full bg-[#EAF3FA] items-center justify-center mb-6">
+          <Ionicons name="swap-horizontal-outline" size={34} color="#2B84B1" />
+        </View>
+        <Text className="text-[24px] font-black text-[#1A2C42] text-center">Switch to buyer mode</Text>
+        <Text className="text-[15px] leading-[24px] text-[#7C8B95] text-center mt-3 max-w-[320px]">
+          Searching and browsing services are available only while you are using the buyer side.
+        </Text>
+        <TouchableOpacity
+          onPress={async () => {
+            await setRole("client");
+            router.replace("/(tabs)");
+          }}
+          className="bg-[#2B84B1] px-6 py-4 rounded-[18px] mt-8"
+        >
+          <Text className="text-white font-bold">Switch to Buyer Mode</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace("/(provider-tabs)")} className="px-6 py-4 mt-2">
+          <Text className="text-[#2B84B1] font-bold">Back to Provider Dashboard</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["top"]}>

@@ -159,6 +159,20 @@ export type PublicServiceDetail = {
   }[];
 };
 
+export type ProviderAvailabilityBlock = {
+  id: string;
+  providerId?: string;
+  scope: "full_day" | "time_slot";
+  dateKey: string;
+  startTime?: string;
+  endTime?: string;
+  note?: string;
+  recurrence?: "none" | "weekly";
+  status?: "active" | "cancelled";
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type PublicProviderProfile = {
   provider?: {
     id?: string;

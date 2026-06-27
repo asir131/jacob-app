@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -31,8 +32,9 @@ export default function ServiceDetailsPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id = "" } = useLocalSearchParams<{ id?: string }>();
-  const { isAuthenticated, updateProfile, user } = useAuth();
-  const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
+  const { isAuthenticated, role, setRole, updateProfile, user } = useAuth();
+  const isProviderMode = role === "provider";
+  const { data, isLoading } = useGetPublicServiceByIdQuery(!id || isProviderMode ? skipToken : id);
   const [saveService, { isLoading: isSavingService }] = useSaveServiceMutation();
   const [removeSavedService, { isLoading: isRemovingSavedService }] = useRemoveSavedServiceMutation();
   const [startProviderConversation, { isLoading: isContactingProvider }] = useStartProviderConversationMutation();
@@ -125,8 +127,8 @@ export default function ServiceDetailsPage() {
       router.push("/(auth)/login");
       return;
     }
-    if (user?.role === "provider") {
-      Alert.alert("Switch to client", "Providers cannot place service orders. Please switch to a client account.");
+    if (isProviderMode) {
+      Alert.alert("Switch to buyer mode", "Orders are available only in buyer mode.");
       return;
     }
     router.push({ pathname: "/book-service", params: { id: service.id, packageName: activePackage.name } });
@@ -139,8 +141,8 @@ export default function ServiceDetailsPage() {
       router.push("/(auth)/login");
       return;
     }
-    if (user?.role !== "client") {
-      Alert.alert("Unavailable", "Only customers can contact professionals from service details.");
+    if (role !== "client") {
+      Alert.alert("Switch to buyer mode", "Contacting professionals from service details is available only in buyer mode.");
       return;
     }
 
@@ -175,8 +177,8 @@ export default function ServiceDetailsPage() {
       router.push("/(auth)/login");
       return;
     }
-    if (user?.role !== "client") {
-      Alert.alert("Unavailable", "Only clients can request a custom order.");
+    if (role !== "client") {
+      Alert.alert("Switch to buyer mode", "Custom orders are available only in buyer mode.");
       return;
     }
 
@@ -203,6 +205,32 @@ export default function ServiceDetailsPage() {
       Alert.alert("Could not start custom order", getErrorMessage(error, "Please try again."));
     }
   };
+
+  if (isProviderMode) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center px-8">
+        <View className="w-20 h-20 rounded-full bg-[#EAF3FA] items-center justify-center mb-6">
+          <Ionicons name="swap-horizontal-outline" size={34} color="#2B84B1" />
+        </View>
+        <Text className="text-[24px] font-black text-[#1A2C42] text-center">Switch to buyer mode</Text>
+        <Text className="text-[15px] leading-[24px] text-[#7C8B95] text-center mt-3 max-w-[320px]">
+          Service browsing, contact, custom orders, and checkout are available only while you are using the buyer side.
+        </Text>
+        <TouchableOpacity
+          onPress={async () => {
+            await setRole("client");
+            router.replace({ pathname: "/service-details", params: { id } });
+          }}
+          className="bg-[#2B84B1] px-6 py-4 rounded-[18px] mt-8"
+        >
+          <Text className="text-white font-bold">Switch to Buyer Mode</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace("/(provider-tabs)")} className="px-6 py-4 mt-2">
+          <Text className="text-[#2B84B1] font-bold">Back to Provider Dashboard</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -427,20 +455,25 @@ export default function ServiceDetailsPage() {
           </View>
           <Text className="text-[22px] font-black text-[#2B84B1]">{formatCurrency(activePackage?.price || service.avgPackagePrice)}</Text>
         </View>
-        <TouchableOpacity onPress={() => void handleBookNow()} className="bg-[#2B84B1] py-5 rounded-[18px] items-center">
-          <Text className="text-white font-bold text-[17px]">Book Now</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => void handleContactProfessional()}
-          disabled={isContactingProvider}
-          className="mt-3 rounded-[18px] border border-[#D8E3EC] bg-white py-4 items-center"
-        >
-          {isContactingProvider ? (
-            <ActivityIndicator color="#2B84B1" />
-          ) : (
-            <Text className="text-[#1A2C42] font-bold text-[15px]">Contact Professional</Text>
-          )}
-        </TouchableOpacity>
+        <View className="flex-row">
+          <TouchableOpacity
+            onPress={() => void handleContactProfessional()}
+            disabled={isContactingProvider}
+            className="mr-3 flex-1 flex-row items-center justify-center rounded-[18px] bg-[#1A2C42] py-5"
+          >
+            {isContactingProvider ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color="white" />
+                <Text className="ml-2 text-white font-black text-[15px]">Contact</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => void handleBookNow()} className="flex-1 bg-[#2B84B1] py-5 rounded-[18px] items-center">
+            <Text className="text-white font-black text-[15px]">Book Now</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={() => void handleCustomOrder()} disabled={isStartingCustomOrder} className="items-center pt-3">
           <Text className="text-[#2B84B1] font-bold text-[14px]">
             {isStartingCustomOrder ? "Starting custom order..." : "You can create your custom order"}

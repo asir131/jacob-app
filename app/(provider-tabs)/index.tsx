@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, Platform, ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Image, Platform, RefreshControl, ScrollView, Share, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -10,8 +10,12 @@ import { UserAvatar } from "@/src/components/UserAvatar";
 import { formatCurrency } from "@/src/lib/formatters";
 import {
   useAcceptProviderOrderMutation,
+  useCreateProviderAvailabilityBlockMutation,
+  useDeleteProviderAvailabilityBlockMutation,
+  useGetProviderAvailabilityBlocksQuery,
   useDeclineProviderOrderMutation,
   useGetProviderDashboardQuery,
+  useGetProviderOrdersQuery,
 } from "@/src/store/services/apiSlice";
 
 const quickActions = [
@@ -35,19 +39,196 @@ const formatRelativeTime = (value?: string) => {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const addDaysKey = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+};
+
+const formatAvailabilityLabel = (block: any) => {
+  const repeat = block.recurrence === "weekly" ? " weekly" : "";
+  if (block.scope === "full_day") return `Full day off${repeat}`;
+  return `${block.startTime || "Start"} - ${block.endTime || "End"}${repeat}`;
+};
+
+const ACTIVE_BOOKING_STATUSES = new Set([
+  "accepted",
+  "accepting_delivery",
+  "revision_requested",
+  "under_revision",
+  "after_sell_revision_requested",
+  "under_after_sell_revision",
+  "done_after_sell_revision",
+]);
+
+const parseDateKey = (dateKey: string) => {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const getOrderDateKey = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return toDateKey(date);
+};
+
+const blockAppliesToDate = (block: any, dateKey: string) => {
+  if (block.dateKey === dateKey) return true;
+  if (block.recurrence !== "weekly") return false;
+  const startDate = parseDateKey(block.dateKey);
+  const targetDate = parseDateKey(dateKey);
+  return Boolean(startDate && targetDate && targetDate >= startDate && targetDate.getDay() === startDate.getDay());
+};
+
+const monthTitle = (date: Date) =>
+  date.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+const buildCalendarDays = (monthDate: Date) => {
+  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const gridStart = new Date(firstDay);
+  gridStart.setDate(firstDay.getDate() - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    return {
+      date,
+      key: toDateKey(date),
+      isCurrentMonth: date.getMonth() === monthDate.getMonth(),
+      isToday: toDateKey(date) === toDateKey(new Date()),
+    };
+  });
+};
+
 export default function SellerDashboard() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { notifications, unreadCount } = useSocketNotifications();
   const insets = useSafeAreaInsets();
   const tabBarHeight =
     Platform.OS === "ios" ? 65 + insets.bottom : 75 + (insets.bottom > 0 ? insets.bottom : 0);
-  const { data, refetch } = useGetProviderDashboardQuery();
+  const {
+    data,
+    error: dashboardError,
+    isFetching: dashboardFetching,
+    isLoading: dashboardLoading,
+    refetch,
+  } = useGetProviderDashboardQuery(undefined, {
+    skip: authLoading,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const calendarRange = useMemo(
+    () => ({
+      from: calendarDays[0]?.key || addDaysKey(0),
+      to: calendarDays[calendarDays.length - 1]?.key || addDaysKey(60),
+    }),
+    [calendarDays]
+  );
+  const {
+    data: availabilityData,
+    isFetching: availabilityFetching,
+    refetch: refetchAvailability,
+  } = useGetProviderAvailabilityBlocksQuery(
+    {
+      from: calendarRange.from,
+      to: calendarRange.to,
+    },
+    {
+      skip: authLoading,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    }
+  );
+  const {
+    data: providerOrdersData,
+    isFetching: providerOrdersFetching,
+    refetch: refetchProviderOrders,
+  } = useGetProviderOrdersQuery(
+    {
+      page: 1,
+      limit: 100,
+      search: "",
+      status: "all",
+    },
+    {
+      skip: authLoading,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    }
+  );
   const [acceptOrder, { isLoading: accepting }] = useAcceptProviderOrderMutation();
   const [declineOrder, { isLoading: declining }] = useDeclineProviderOrderMutation();
+  const [createAvailabilityBlock, { isLoading: creatingBlock }] = useCreateProviderAvailabilityBlockMutation();
+  const [deleteAvailabilityBlock, { isLoading: deletingBlock }] = useDeleteProviderAvailabilityBlockMutation();
+  const [blockScope, setBlockScope] = useState<"time_slot" | "full_day">("time_slot");
+  const [blockDateKey, setBlockDateKey] = useState(addDaysKey(0));
+  const [blockStartTime, setBlockStartTime] = useState("09:00");
+  const [blockEndTime, setBlockEndTime] = useState("12:00");
+  const [blockNote, setBlockNote] = useState("");
+  const [blockRecursWeekly, setBlockRecursWeekly] = useState(false);
   const dashboard = data?.data;
   const refetchMarkerRef = useRef("");
   const latestNotification = notifications[0];
+  const availabilityBlocks = useMemo(() => availabilityData?.data?.items || [], [availabilityData?.data?.items]);
+
+  const bookedJobs = useMemo(() => {
+    const todayKey = toDateKey(new Date());
+    return ((providerOrdersData?.data?.items || []) as any[])
+      .filter((order) => {
+        const dateKey = getOrderDateKey(order.scheduledDate);
+        return Boolean(dateKey && dateKey >= todayKey && ACTIVE_BOOKING_STATUSES.has(String(order.status || "")));
+      })
+      .sort((a, b) => {
+        const dateCompare = getOrderDateKey(a.scheduledDate).localeCompare(getOrderDateKey(b.scheduledDate));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a.scheduledTime || "").localeCompare(String(b.scheduledTime || ""));
+      });
+  }, [providerOrdersData?.data?.items]);
+
+  const bookedJobsByDate = useMemo(() => {
+    return bookedJobs.reduce<Record<string, any[]>>((acc, job) => {
+      const dateKey = getOrderDateKey(job.scheduledDate);
+      if (!dateKey) return acc;
+      acc[dateKey] = [...(acc[dateKey] || []), job];
+      return acc;
+    }, {});
+  }, [bookedJobs]);
+
+  const availabilityByDate = useMemo(() => {
+    return calendarDays.reduce<Record<string, any[]>>((acc, day) => {
+      const blocks = availabilityBlocks.filter((block: any) => blockAppliesToDate(block, day.key));
+      if (blocks.length) acc[day.key] = blocks;
+      return acc;
+    }, {});
+  }, [availabilityBlocks, calendarDays]);
+
+  const selectedDateBlocks = availabilityByDate[blockDateKey] || [];
+  const selectedDateJobs = bookedJobsByDate[blockDateKey] || [];
+  const initialLoading = authLoading || (dashboardLoading && !dashboard);
+  const refreshing = dashboardFetching || availabilityFetching || providerOrdersFetching;
+  const hasDashboardError = Boolean(dashboardError && !dashboard);
+
+  const refetchAll = useCallback(() => {
+    if (authLoading) return;
+    void refetch();
+    void refetchAvailability();
+    void refetchProviderOrders();
+  }, [authLoading, refetch, refetchAvailability, refetchProviderOrders]);
 
   const statCards = [
     {
@@ -117,6 +298,31 @@ export default function SellerDashboard() {
     }
   };
 
+  const handleCreateAvailabilityBlock = async () => {
+    try {
+      await createAvailabilityBlock({
+        dateKey: blockDateKey,
+        scope: blockScope,
+        startTime: blockScope === "time_slot" ? blockStartTime : "",
+        endTime: blockScope === "time_slot" ? blockEndTime : "",
+        note: blockNote.trim(),
+        recurrence: blockRecursWeekly ? "weekly" : "none",
+      }).unwrap();
+      setBlockNote("");
+      Alert.alert("Availability updated", "Blocked time was added to your provider calendar.");
+    } catch (error: any) {
+      Alert.alert("Block failed", error?.data?.message || error?.message || "Please check the date and time.");
+    }
+  };
+
+  const handleDeleteAvailabilityBlock = async (id: string) => {
+    try {
+      await deleteAvailabilityBlock(id).unwrap();
+    } catch (error: any) {
+      Alert.alert("Remove failed", error?.data?.message || error?.message || "Please try again.");
+    }
+  };
+
   useEffect(() => {
     if (!latestNotification) return;
     const notificationType = String((latestNotification.data || {})?.notificationType || "");
@@ -125,6 +331,12 @@ export default function SellerDashboard() {
     refetchMarkerRef.current = latestNotification.id;
     void refetch();
   }, [latestNotification, refetch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchAll();
+    }, [refetchAll])
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-[#FAFCFD]" edges={["top"]}>
@@ -145,7 +357,31 @@ export default function SellerDashboard() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}>
+      <ScrollView
+        className="flex-1 px-6 pt-6"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
+        refreshControl={<RefreshControl refreshing={refreshing && !initialLoading} onRefresh={refetchAll} tintColor="#2B84B1" />}
+      >
+        {initialLoading ? (
+          <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5 mb-6 items-center">
+            <ActivityIndicator color="#2B84B1" />
+            <Text className="text-[14px] font-bold text-[#7C8B95] mt-3">Loading provider dashboard...</Text>
+          </View>
+        ) : null}
+
+        {hasDashboardError ? (
+          <View className="bg-[#FEF2F2] rounded-[28px] p-6 border border-[#FECACA] mb-6">
+            <Text className="text-[18px] font-black text-[#991B1B]">Dashboard data did not load</Text>
+            <Text className="text-[14px] leading-[22px] text-[#B91C1C] mt-2">
+              Check backend connection and pull down to retry.
+            </Text>
+            <TouchableOpacity onPress={refetchAll} className="mt-4 self-start bg-[#DC2626] rounded-[16px] px-5 py-3">
+              <Text className="text-white font-black">Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <View className="bg-[#1A2C42] rounded-[32px] p-6 mb-8">
           <Text className="text-white/70 text-[14px] font-bold mb-1 tracking-widest uppercase">Net Income</Text>
           <Text className="text-white text-[42px] font-black tracking-tight">{formatCurrency(dashboard?.revenue?.totalEarnings || 0)}</Text>
@@ -196,6 +432,164 @@ export default function SellerDashboard() {
               </View>
               <Text className="text-[13px] font-bold text-[#1A2C42]">{action.label}</Text>
             </TouchableOpacity>
+          ))}
+        </View>
+
+        <View className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm shadow-black/5 mb-8">
+          <View className="flex-row items-center justify-between mb-5">
+            <View className="flex-1">
+              <Text className="text-[12px] font-bold tracking-[0.18em] uppercase text-[#7C8B95]">Calendar Availability</Text>
+              <Text className="text-[22px] font-black text-[#1A2C42] mt-2">Calendar View</Text>
+            </View>
+            <View className="w-12 h-12 rounded-full bg-[#FEE2E2] items-center justify-center">
+              <Ionicons name="ban-outline" size={22} color="#DC2626" />
+            </View>
+          </View>
+
+          <View className="flex-row items-center justify-between mb-4">
+            <TouchableOpacity
+              onPress={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+              className="h-10 w-10 rounded-full bg-[#EAF3FA] items-center justify-center"
+            >
+              <Ionicons name="chevron-back" size={20} color="#2286BE" />
+            </TouchableOpacity>
+            <Text className="text-[17px] font-black text-[#1A2C42]">{monthTitle(calendarMonth)}</Text>
+            <TouchableOpacity
+              onPress={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+              className="h-10 w-10 rounded-full bg-[#EAF3FA] items-center justify-center"
+            >
+              <Ionicons name="chevron-forward" size={20} color="#2286BE" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="flex-row mb-2">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <Text key={day} className="flex-1 text-center text-[10px] font-black uppercase text-[#94A3B8]">
+                {day}
+              </Text>
+            ))}
+          </View>
+
+          <View className="flex-row flex-wrap mb-5">
+            {calendarDays.map((day) => {
+              const blocks = availabilityByDate[day.key] || [];
+              const jobs = bookedJobsByDate[day.key] || [];
+              const isSelected = blockDateKey === day.key;
+              const hasFullDayBlock = blocks.some((block: any) => block.scope === "full_day");
+
+              return (
+                <TouchableOpacity key={day.key} onPress={() => setBlockDateKey(day.key)} className="w-[14.285%] p-1">
+                  <View
+                    className={`h-11 items-center justify-center rounded-[14px] border ${
+                      isSelected
+                        ? "bg-[#2286BE] border-[#2286BE]"
+                        : hasFullDayBlock
+                          ? "bg-[#FEF2F2] border-[#FECACA]"
+                          : blocks.length
+                            ? "bg-[#FFF7ED] border-[#FED7AA]"
+                            : jobs.length
+                              ? "bg-[#EAF3FA] border-[#BFDBFE]"
+                              : "bg-[#F8FAFC] border-[#F1F5F9]"
+                    } ${day.isCurrentMonth ? "opacity-100" : "opacity-40"}`}
+                  >
+                    <Text className={`text-[13px] font-black ${isSelected ? "text-white" : day.isToday ? "text-[#2286BE]" : "text-[#1A2C42]"}`}>
+                      {day.date.getDate()}
+                    </Text>
+                    {blocks.length || jobs.length ? (
+                      <View className="mt-0.5 flex-row">
+                        {blocks.length ? <View className={`h-1.5 w-1.5 rounded-full mr-1 ${hasFullDayBlock ? "bg-[#DC2626]" : "bg-[#F97316]"}`} /> : null}
+                        {jobs.length ? <View className="h-1.5 w-1.5 rounded-full bg-[#2286BE]" /> : null}
+                      </View>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View className="rounded-[20px] bg-[#F8FAFC] px-4 py-4 mb-5">
+            <Text className="text-[12px] font-black uppercase tracking-[0.16em] text-[#7C8B95]">Selected Date</Text>
+            <Text className="text-[18px] font-black text-[#1A2C42] mt-1">{blockDateKey}</Text>
+            <Text className="text-[13px] font-bold text-[#7C8B95] mt-2">
+              {selectedDateJobs.length} booked jobs, {selectedDateBlocks.length} blocked slots
+            </Text>
+            {selectedDateJobs.slice(0, 2).map((job) => (
+              <View key={String(job.id || job._id || job.orderNumber)} className="mt-3 rounded-[16px] bg-white px-4 py-3">
+                <Text className="text-[14px] font-black text-[#1A2C42]">{job.orderName || job.packageTitle || "Booked job"}</Text>
+                <Text className="text-[12px] font-bold text-[#2286BE] mt-1">{job.scheduledTime || "Time not set"}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View className="flex-row bg-[#F8FAFC] rounded-[18px] p-1 mb-4">
+            {(["time_slot", "full_day"] as const).map((scope) => (
+              <TouchableOpacity
+                key={scope}
+                onPress={() => setBlockScope(scope)}
+                className={`flex-1 py-3 rounded-[15px] items-center ${blockScope === scope ? "bg-[#DC2626]" : ""}`}
+              >
+                <Text className={`font-black text-[12px] ${blockScope === scope ? "text-white" : "text-[#7C8B95]"}`}>
+                  {scope === "time_slot" ? "Time Slot" : "Full Day"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text className="text-[13px] font-bold text-[#1A2C42] mb-2">Date</Text>
+          <TextInput
+            value={blockDateKey}
+            onChangeText={setBlockDateKey}
+            placeholder="YYYY-MM-DD"
+            className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-4"
+          />
+
+          {blockScope === "time_slot" ? (
+            <View className="flex-row mb-4">
+              <View className="flex-1 mr-3">
+                <Text className="text-[13px] font-bold text-[#1A2C42] mb-2">Start</Text>
+                <TextInput value={blockStartTime} onChangeText={setBlockStartTime} placeholder="09:00" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px]" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[13px] font-bold text-[#1A2C42] mb-2">End</Text>
+                <TextInput value={blockEndTime} onChangeText={setBlockEndTime} placeholder="12:00" className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px]" />
+              </View>
+            </View>
+          ) : null}
+
+          <Text className="text-[13px] font-bold text-[#1A2C42] mb-2">Optional note</Text>
+          <TextInput
+            value={blockNote}
+            onChangeText={setBlockNote}
+            placeholder="Vacation, appointment, personal time..."
+            className="bg-[#F8FAFC] rounded-[18px] px-4 py-4 text-[15px] mb-4"
+          />
+
+          <TouchableOpacity onPress={() => setBlockRecursWeekly((value) => !value)} className="flex-row items-center mb-5">
+            <View className={`w-6 h-6 rounded-[8px] items-center justify-center mr-3 ${blockRecursWeekly ? "bg-[#DC2626]" : "bg-[#F1F5F9]"}`}>
+              {blockRecursWeekly ? <Ionicons name="checkmark" size={16} color="white" /> : null}
+            </View>
+            <Text className="font-bold text-[#1A2C42]">Repeat weekly</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => void handleCreateAvailabilityBlock()}
+            disabled={creatingBlock}
+            className={`rounded-[18px] py-4 items-center mb-5 ${creatingBlock ? "bg-gray-300" : "bg-[#DC2626]"}`}
+          >
+            <Text className="text-white font-black">{creatingBlock ? "Saving..." : "Block Availability"}</Text>
+          </TouchableOpacity>
+
+          {selectedDateBlocks.map((block: any) => (
+            <View key={block.id} className="flex-row items-center justify-between bg-[#FFF7ED] rounded-[18px] p-4 mb-3">
+              <View className="flex-1 mr-3">
+                <Text className="text-[15px] font-black text-[#1A2C42]">{block.dateKey}</Text>
+                <Text className="text-[13px] font-bold text-[#C2410C] mt-1">{formatAvailabilityLabel(block)}</Text>
+                {block.note ? <Text className="text-[12px] text-[#7C8B95] mt-1">{block.note}</Text> : null}
+              </View>
+              <TouchableOpacity disabled={deletingBlock} onPress={() => void handleDeleteAvailabilityBlock(block.id)} className="w-10 h-10 rounded-full bg-white items-center justify-center">
+                <Ionicons name="trash-outline" size={18} color="#DC2626" />
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
 

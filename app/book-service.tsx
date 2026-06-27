@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -23,17 +24,64 @@ import {
 } from "@/src/components/SchedulePickerFields";
 import {
   useCreateOrderMutation,
+  useGetPublicProviderAvailabilityBlocksQuery,
   useGetPublicServiceByIdQuery,
 } from "@/src/store/services/apiSlice";
 
 const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
 
+const addDaysKey = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+};
+
+const parseDateKey = (dateKey: string) => {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const parseTimeToMinutes = (value = "") => {
+  const text = String(value).trim();
+  const meridiem = text.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (meridiem) {
+    const rawHour = Number(meridiem[1]);
+    const minute = Number(meridiem[2]);
+    const hour = meridiem[3].toUpperCase() === "PM" ? (rawHour % 12) + 12 : rawHour % 12;
+    return hour * 60 + minute;
+  }
+  const clock = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!clock) return null;
+  return Number(clock[1]) * 60 + Number(clock[2]);
+};
+
+const blockAppliesToDate = (block: any, dateKey: string) => {
+  if (block.dateKey === dateKey) return true;
+  if (block.recurrence !== "weekly") return false;
+  const startDate = parseDateKey(block.dateKey);
+  const targetDate = parseDateKey(dateKey);
+  return Boolean(startDate && targetDate && targetDate >= startDate && targetDate.getDay() === startDate.getDay());
+};
+
+const isSlotBlocked = (blocks: any[], dateKey: string, timeValue: string) => {
+  const minutes = parseTimeToMinutes(timeValue);
+  return blocks.some((block) => {
+    if (!blockAppliesToDate(block, dateKey)) return false;
+    if (block.scope === "full_day") return true;
+    const start = parseTimeToMinutes(block.startTime || "");
+    const end = parseTimeToMinutes(block.endTime || "");
+    return minutes !== null && start !== null && end !== null && minutes >= start && minutes < end;
+  });
+};
+
 export default function BookServicePage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, role, setRole, isAuthenticated } = useAuth();
   const { id = "" } = useLocalSearchParams<{ id?: string }>();
-  const { data, isLoading } = useGetPublicServiceByIdQuery(id, { skip: !id });
+  const isProviderMode = role === "provider";
+  const { data, isLoading } = useGetPublicServiceByIdQuery(!id || isProviderMode ? skipToken : id);
   const [createOrder, { isLoading: creatingOrder }] = useCreateOrderMutation();
   const [step, setStep] = useState(1);
   const [selectedPackage, setSelectedPackage] = useState(0);
@@ -43,11 +91,17 @@ export default function BookServicePage() {
   const [specialInstructions, setSpecialInstructions] = useState("");
 
   const service = data?.data || null;
+  const providerId = service?.provider?.id || "";
+  const { data: availabilityData } = useGetPublicProviderAvailabilityBlocksQuery(
+    providerId ? { providerId, from: addDaysKey(0), to: addDaysKey(90) } : skipToken
+  );
   const packageList = useMemo(() => service?.packages || [], [service?.packages]);
   const activePackage = useMemo(() => packageList[selectedPackage] || packageList[0] || null, [packageList, selectedPackage]);
+  const availabilityBlocks = availabilityData?.data?.items || [];
+  const selectedSlotBlocked = isSlotBlocked(availabilityBlocks, scheduledDate, scheduledTime);
 
   const continueStep = async () => {
-    if (user?.role === "provider") {
+    if (isProviderMode) {
       return;
     }
 
@@ -62,6 +116,10 @@ export default function BookServicePage() {
         Alert.alert("Invalid schedule", "Please select a future preferred date and time.");
         return;
       }
+      if (selectedSlotBlocked) {
+        Alert.alert("Provider unavailable", "The provider has blocked this date or time. Please choose another slot.");
+        return;
+      }
       setStep(3);
       return;
     }
@@ -72,6 +130,10 @@ export default function BookServicePage() {
     }
 
     if (!serviceAddress.trim()) return;
+    if (selectedSlotBlocked) {
+      Alert.alert("Provider unavailable", "The provider has blocked this date or time. Please choose another slot.");
+      return;
+    }
 
     await createOrder({
       gigId: service.id,
@@ -101,18 +163,27 @@ export default function BookServicePage() {
     );
   }
 
-  if (user?.role === "provider") {
+  if (isProviderMode) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-8" edges={["top"]}>
         <View className="w-20 h-20 rounded-full bg-[#FEF3C7] items-center justify-center mb-6">
           <Ionicons name="shield-checkmark-outline" size={34} color="#D97706" />
         </View>
-        <Text className="text-[24px] font-black text-[#1A2C42] text-center">Switch to client to order</Text>
+        <Text className="text-[24px] font-black text-[#1A2C42] text-center">Switch to buyer mode to order</Text>
         <Text className="text-[15px] leading-[24px] text-[#7C8B95] text-center mt-3 max-w-[300px]">
-          Providers cannot place service orders from this account. Please switch to a client account to continue.
+          Ordering services is available only while you are using the buyer side.
         </Text>
-        <TouchableOpacity onPress={() => router.back()} className="bg-[#2B84B1] px-6 py-4 rounded-[18px] mt-8">
-          <Text className="text-white font-bold">Go Back</Text>
+        <TouchableOpacity
+          onPress={async () => {
+            await setRole("client");
+            router.replace({ pathname: "/book-service", params: { id } });
+          }}
+          className="bg-[#2B84B1] px-6 py-4 rounded-[18px] mt-8"
+        >
+          <Text className="text-white font-bold">Switch to Buyer Mode</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace("/(provider-tabs)")} className="px-6 py-4 mt-2">
+          <Text className="text-[#2B84B1] font-bold">Back to Provider Dashboard</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -192,6 +263,14 @@ export default function BookServicePage() {
                 inputClassName="bg-[#F8FAFC]"
                 labelClassName="text-[14px] font-bold text-[#1A2C42] mb-2"
               />
+              {selectedSlotBlocked ? (
+                <View className="mt-4 flex-row items-center rounded-[18px] bg-[#FEF2F2] px-4 py-3">
+                  <Ionicons name="ban-outline" size={18} color="#DC2626" />
+                  <Text className="ml-2 flex-1 text-[13px] font-bold text-[#DC2626]">
+                    The provider is unavailable for this date or time.
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -211,7 +290,11 @@ export default function BookServicePage() {
       </ScrollView>
 
       <View className="absolute bottom-0 w-full bg-white px-6 pt-4 pb-10 border-t border-gray-100">
-        <TouchableOpacity onPress={() => void continueStep()} disabled={creatingOrder} className="bg-[#2B84B1] w-full py-5 rounded-[18px] items-center">
+        <TouchableOpacity
+          onPress={() => void continueStep()}
+          disabled={creatingOrder || (step === 2 && selectedSlotBlocked)}
+          className={`${creatingOrder || (step === 2 && selectedSlotBlocked) ? "bg-gray-300" : "bg-[#2B84B1]"} w-full py-5 rounded-[18px] items-center`}
+        >
           {creatingOrder ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-[17px]">{step < 3 ? "Continue" : "Finalize Order"}</Text>}
         </TouchableOpacity>
       </View>

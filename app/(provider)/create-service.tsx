@@ -9,6 +9,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Text,
   TextInput,
@@ -17,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { MapboxLocationPicker } from "@/src/components/MapboxLocationPicker";
@@ -45,6 +47,8 @@ type PickerAsset = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
+  fileSize?: number | null;
+  duration?: number | null;
 };
 
 const PACKAGE_KEYS: PackageKey[] = ["basic", "standard", "premium"];
@@ -55,6 +59,11 @@ const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
 const MILES_TO_KM = 1.60934;
 const MAX_IMAGE_COUNT = 4;
 const MAX_VIDEO_COUNT = 2;
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+const MAX_VIDEO_DURATION_MS = 120 * 1000;
+const ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm"];
+const ALLOWED_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
 
 const createInitialPackages = (): Record<PackageKey, PackageData> => ({
   basic: { name: "Basic", title: "Basic Package", description: "", deliveryTime: "1", deliveryTimeUnit: "Days", price: "15" },
@@ -77,6 +86,59 @@ const normalizeCategory = (category: CategoryItem & { _id?: string }, index: num
   slug: String(category.slug || ""),
   description: category.description,
 });
+
+const formatFileSize = (bytes?: number | null) => {
+  const value = Number(bytes || 0);
+  if (!value) return "Size unavailable";
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(value / 1024))} KB`;
+};
+
+const getFileExtension = (value?: string | null) => {
+  const match = String(value || "").toLowerCase().match(/\.[a-z0-9]+(?:\?|#|$)/);
+  return match ? match[0].replace(/[?#].*$/, "") : "";
+};
+
+const inferMimeType = (asset: PickerAsset, fallback: string) => {
+  const mimeType = String(asset.mimeType || "").trim();
+  if (mimeType) return mimeType;
+
+  const extension = getFileExtension(asset.fileName || asset.uri);
+  if (extension === ".png") return "image/png";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".heic" || extension === ".heif") return "image/heic";
+  if (extension === ".mov") return "video/quicktime";
+  if (extension === ".webm") return "video/webm";
+  if (extension === ".mp4") return "video/mp4";
+  return fallback;
+};
+
+const sanitizeFileName = (asset: PickerAsset, fallback: string) => {
+  const fileName = String(asset.fileName || "").trim();
+  if (fileName) return fileName;
+
+  const extension = getFileExtension(asset.uri);
+  if (!extension || fallback.toLowerCase().endsWith(extension)) return fallback;
+  return `${fallback}${extension}`;
+};
+
+const mapPickerAsset = (asset: ImagePicker.ImagePickerAsset): PickerAsset => ({
+  uri: asset.uri,
+  fileName: asset.fileName,
+  mimeType: asset.mimeType,
+  fileSize: asset.fileSize,
+  duration: asset.duration,
+});
+
+const isPermissionGranted = (permission: ImagePicker.PermissionResponse) =>
+  permission.status === "granted" || permission.granted;
+
+const showPermissionAlert = (title: string, message: string) => {
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    { text: "Open Settings", onPress: () => void Linking.openSettings() },
+  ]);
+};
 
 export default function CreateServicePage() {
   const router = useRouter();
@@ -213,14 +275,120 @@ export default function CreateServicePage() {
     }));
   };
 
-  const pickImages = async () => {
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) return error.message;
+    if (!error || typeof error !== "object") return fallback;
+
+    const value = error as {
+      data?: { message?: string };
+      error?: string;
+      message?: string;
+    };
+
+    return value.data?.message || value.message || value.error || fallback;
+  };
+
+  const validateImageAsset = (asset: PickerAsset) => {
+    const mimeType = inferMimeType(asset, "image/jpeg");
+    if (!mimeType.startsWith("image/")) {
+      return "Please choose image files only for the image gallery.";
+    }
+    if (asset.fileSize && asset.fileSize > MAX_IMAGE_SIZE_BYTES) {
+      return "Each gig image must be 10 MB or smaller.";
+    }
+    return "";
+  };
+
+  const validateVideoAsset = (asset: PickerAsset) => {
+    const mimeType = inferMimeType(asset, "video/mp4").toLowerCase();
+    const extension = getFileExtension(asset.fileName || asset.uri);
+    const isAllowedVideo = ALLOWED_VIDEO_MIME_TYPES.includes(mimeType) || ALLOWED_VIDEO_EXTENSIONS.includes(extension);
+
+    if (!isAllowedVideo) {
+      return "Gig videos must be MP4, MOV, or WebM files.";
+    }
+    if (asset.fileSize && asset.fileSize > MAX_VIDEO_SIZE_BYTES) {
+      return "Each gig video must be 100 MB or smaller.";
+    }
+    if (asset.duration && asset.duration > MAX_VIDEO_DURATION_MS) {
+      return "Gig videos must be 2 minutes or shorter.";
+    }
+    return "";
+  };
+
+  const requestLibraryPermission = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (isPermissionGranted(permission)) return true;
+
+    showPermissionAlert(
+      "Gallery permission needed",
+      "Allow photo and video library access so you can add media to your gig."
+    );
+    return false;
+  };
+
+  const requestCameraPermission = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (isPermissionGranted(permission)) return true;
+
+    showPermissionAlert(
+      "Camera permission needed",
+      "Allow camera access so you can capture gig photos or videos."
+    );
+    return false;
+  };
+
+  const addImageAssets = (assets: PickerAsset[]) => {
+    const remainingSlots = MAX_IMAGE_COUNT - displayedImages.length;
+    const validAssets: PickerAsset[] = [];
+
+    for (const asset of assets.slice(0, remainingSlots)) {
+      const validationError = validateImageAsset(asset);
+      if (validationError) {
+        Alert.alert("Image not added", validationError);
+        continue;
+      }
+      validAssets.push({
+        ...asset,
+        mimeType: inferMimeType(asset, "image/jpeg"),
+      });
+    }
+
+    if (validAssets.length) {
+      setNewImages((current) => [...current, ...validAssets]);
+    }
+  };
+
+  const addVideoAssets = (assets: PickerAsset[]) => {
+    const remainingSlots = MAX_VIDEO_COUNT - displayedVideos.length;
+    const validAssets: PickerAsset[] = [];
+
+    for (const asset of assets.slice(0, remainingSlots)) {
+      const validationError = validateVideoAsset(asset);
+      if (validationError) {
+        Alert.alert("Video not added", validationError);
+        continue;
+      }
+      validAssets.push({
+        ...asset,
+        mimeType: inferMimeType(asset, "video/mp4"),
+      });
+    }
+
+    if (validAssets.length) {
+      setNewVideos((current) => [...current, ...validAssets]);
+    }
+  };
+
+  const pickImagesFromLibrary = async () => {
     if (displayedImages.length >= MAX_IMAGE_COUNT) {
       Alert.alert("Limit reached", `You can upload up to ${MAX_IMAGE_COUNT} images.`);
       return;
     }
+    if (!(await requestLibraryPermission())) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: MAX_IMAGE_COUNT - displayedImages.length,
@@ -228,35 +396,78 @@ export default function CreateServicePage() {
 
     if (result.canceled) return;
 
-    const selectedAssets = result.assets.slice(0, MAX_IMAGE_COUNT - displayedImages.length).map((asset) => ({
-      uri: asset.uri,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-    }));
-    setNewImages((current) => [...current, ...selectedAssets]);
+    addImageAssets(result.assets.map(mapPickerAsset));
   };
 
-  const pickVideos = async () => {
+  const captureImage = async () => {
+    if (displayedImages.length >= MAX_IMAGE_COUNT) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_IMAGE_COUNT} images.`);
+      return;
+    }
+    if (!(await requestCameraPermission())) return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+    });
+
+    if (result.canceled) return;
+    addImageAssets(result.assets.map(mapPickerAsset));
+  };
+
+  const pickVideosFromLibrary = async () => {
     if (displayedVideos.length >= MAX_VIDEO_COUNT) {
       Alert.alert("Limit reached", `You can upload up to ${MAX_VIDEO_COUNT} videos.`);
       return;
     }
+    if (!(await requestLibraryPermission())) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "videos",
+      mediaTypes: ["videos"],
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: MAX_VIDEO_COUNT - displayedVideos.length,
+      videoMaxDuration: MAX_VIDEO_DURATION_MS / 1000,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
     });
 
     if (result.canceled) return;
 
-    const selectedAssets = result.assets.slice(0, MAX_VIDEO_COUNT - displayedVideos.length).map((asset) => ({
-      uri: asset.uri,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-    }));
-    setNewVideos((current) => [...current, ...selectedAssets]);
+    addVideoAssets(result.assets.map(mapPickerAsset));
+  };
+
+  const captureVideo = async () => {
+    if (displayedVideos.length >= MAX_VIDEO_COUNT) {
+      Alert.alert("Limit reached", `You can upload up to ${MAX_VIDEO_COUNT} videos.`);
+      return;
+    }
+    if (!(await requestCameraPermission())) return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["videos"],
+      quality: 0.8,
+      videoMaxDuration: MAX_VIDEO_DURATION_MS / 1000,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+    });
+
+    if (result.canceled) return;
+    addVideoAssets(result.assets.map(mapPickerAsset));
+  };
+
+  const showImagePickerOptions = () => {
+    Alert.alert("Add Images", "Choose where to get your gig photos.", [
+      { text: "Photo Library", onPress: () => void pickImagesFromLibrary() },
+      { text: "Camera", onPress: () => void captureImage() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const showVideoPickerOptions = () => {
+    Alert.alert("Add Videos", "Choose where to get your gig videos.", [
+      { text: "Video Library", onPress: () => void pickVideosFromLibrary() },
+      { text: "Camera", onPress: () => void captureVideo() },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const handleUseCurrentLocation = async () => {
@@ -308,17 +519,31 @@ export default function CreateServicePage() {
     if (step === 2) {
       const hasInvalidPackage = PACKAGE_KEYS.some((key) => {
         const item = packages[key];
-        return !item.description.trim() || !item.deliveryTime.trim() || !item.price.trim();
+        return !item.description.trim() || !item.deliveryTime.trim() || !item.price.trim() || Number(item.price) <= 0;
       });
       if (hasInvalidPackage) {
-        Alert.alert("Required", "Please complete all package details.");
+        Alert.alert("Required", "Please complete all package details with a valid price.");
         return false;
       }
     }
 
-    if (step === 3 && mediaCount < 1) {
-      Alert.alert("Required", "Please select at least one image or video.");
-      return false;
+    if (step === 3) {
+      if (mediaCount < 1) {
+        Alert.alert("Required", "Please select at least one image or video.");
+        return false;
+      }
+
+      const invalidImage = newImages.find(validateImageAsset);
+      if (invalidImage) {
+        Alert.alert("Image not ready", validateImageAsset(invalidImage));
+        return false;
+      }
+
+      const invalidVideo = newVideos.find(validateVideoAsset);
+      if (invalidVideo) {
+        Alert.alert("Video not ready", validateVideoAsset(invalidVideo));
+        return false;
+      }
     }
 
     if (step === 4 && !formData.description.trim()) {
@@ -368,15 +593,15 @@ export default function CreateServicePage() {
       newImages.forEach((asset, index) => {
         payload.append("images", {
           uri: asset.uri,
-          name: asset.fileName || `gig-image-${index + 1}.jpg`,
-          type: asset.mimeType || "image/jpeg",
+          name: sanitizeFileName(asset, `gig-image-${index + 1}.jpg`),
+          type: inferMimeType(asset, "image/jpeg"),
         } as any);
       });
       newVideos.forEach((asset, index) => {
         payload.append("videos", {
           uri: asset.uri,
-          name: asset.fileName || `gig-video-${index + 1}.mp4`,
-          type: asset.mimeType || "video/mp4",
+          name: sanitizeFileName(asset, `gig-video-${index + 1}.mp4`),
+          type: inferMimeType(asset, "video/mp4"),
         } as any);
       });
 
@@ -390,7 +615,7 @@ export default function CreateServicePage() {
         { text: "OK", onPress: () => router.replace("/(provider-tabs)/services" as any) },
       ]);
     } catch (error) {
-      Alert.alert("Publish failed", error instanceof Error ? error.message : "Could not publish gig.");
+      Alert.alert("Publish failed", getErrorMessage(error, "Could not publish gig. Please check your media and try again."));
     } finally {
       setLoading(false);
     }
@@ -577,26 +802,34 @@ export default function CreateServicePage() {
               <Text className="text-[14px] text-[#7C8B95] mb-6">Upload images and videos that introduce your service.</Text>
               <View className="flex-row mb-6">
                 <TouchableOpacity
-                  onPress={pickImages}
+                  onPress={showImagePickerOptions}
                   className="flex-1 h-[150px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center mr-3"
                 >
                   <Ionicons name="cloud-upload" size={34} color="#2B84B1" />
-                  <Text className="font-bold text-[#1A2C42] mt-2">Select Images</Text>
-                  <Text className="text-[12px] text-[#7C8B95] mt-1">Up to {MAX_IMAGE_COUNT}</Text>
+                  <Text className="font-bold text-[#1A2C42] mt-2">Add Images</Text>
+                  <Text className="text-[12px] text-[#7C8B95] mt-1">
+                    {displayedImages.length}/{MAX_IMAGE_COUNT} selected
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={pickVideos}
+                  onPress={showVideoPickerOptions}
                   className="flex-1 h-[150px] border-2 border-dashed border-[#2B84B1]/30 rounded-[24px] bg-[#F4F9FC] items-center justify-center"
                 >
                   <Ionicons name="videocam-outline" size={34} color="#2B84B1" />
-                  <Text className="font-bold text-[#1A2C42] mt-2">Select Videos</Text>
-                  <Text className="text-[12px] text-[#7C8B95] mt-1">Up to {MAX_VIDEO_COUNT}</Text>
+                  <Text className="font-bold text-[#1A2C42] mt-2">Add Videos</Text>
+                  <Text className="text-[12px] text-[#7C8B95] mt-1">
+                    {displayedVideos.length}/{MAX_VIDEO_COUNT} selected
+                  </Text>
                 </TouchableOpacity>
               </View>
+              <Text className="text-[12px] leading-[18px] text-[#7C8B95] mb-4">
+                Images must be under 10 MB. Videos must be MP4, MOV, or WebM, under 100 MB, and 2 minutes or shorter.
+              </Text>
 
               <View className="flex-row flex-wrap gap-4">
                 {displayedImages.map((image, index) => (
-                  <View key={`${image}-${index}`} className="w-[100px] h-[80px] rounded-xl bg-gray-200 relative overflow-hidden">
+                  <View key={`${image}-${index}`} className="w-[104px] rounded-xl bg-white border border-gray-100 overflow-hidden">
+                    <View className="w-full h-[82px] bg-gray-200 relative">
                     <Image source={{ uri: image }} className="w-full h-full" resizeMode="cover" />
                     <TouchableOpacity
                       onPress={() => {
@@ -611,6 +844,15 @@ export default function CreateServicePage() {
                     >
                       <Ionicons name="close-circle" size={22} color="white" />
                     </TouchableOpacity>
+                    </View>
+                    <View className="px-2 py-2">
+                      <Text className="text-[10px] font-bold text-[#1A2C42]" numberOfLines={1}>
+                        {index < existingImageUrls.length ? `Existing image ${index + 1}` : newImages[index - existingImageUrls.length]?.fileName || `Image ${index + 1}`}
+                      </Text>
+                      <Text className="text-[10px] text-[#7C8B95] mt-0.5">
+                        {index < existingImageUrls.length ? "Saved" : formatFileSize(newImages[index - existingImageUrls.length]?.fileSize)}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -618,11 +860,31 @@ export default function CreateServicePage() {
                 <View className="mt-6">
                   <Text className="text-[14px] font-bold text-[#1A2C42] mb-3 ml-1">Videos</Text>
                   {displayedVideos.map((video, index) => (
-                    <View key={`${video}-${index}`} className="mb-3 rounded-[18px] bg-[#F8FAFC] border border-gray-100 px-4 py-3 flex-row items-center">
-                      <Ionicons name="videocam" size={22} color="#2B84B1" />
-                      <Text className="ml-3 flex-1 text-[13px] font-bold text-[#1A2C42]" numberOfLines={1}>
-                        {index < existingVideoUrls.length ? `Existing video ${index + 1}` : newVideos[index - existingVideoUrls.length]?.fileName || `Selected video ${index + 1}`}
-                      </Text>
+                    <View key={`${video}-${index}`} className="mb-4 rounded-[20px] bg-white border border-gray-100 overflow-hidden">
+                      <View className="h-[180px] bg-black">
+                        <WebView
+                          originWhitelist={["*"]}
+                          allowsInlineMediaPlayback
+                          allowsFullscreenVideo
+                          mixedContentMode="always"
+                          mediaPlaybackRequiresUserAction
+                          allowFileAccess
+                          source={{
+                            html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body style="margin:0;background:#000;"><video src=${JSON.stringify(video)} controls playsinline preload="metadata" style="width:100%;height:100vh;object-fit:contain;background:#000;"></video></body></html>`,
+                          }}
+                          className="h-full w-full bg-black"
+                        />
+                      </View>
+                      <View className="px-4 py-3 flex-row items-center">
+                        <Ionicons name="videocam" size={22} color="#2B84B1" />
+                        <View className="ml-3 flex-1">
+                          <Text className="text-[13px] font-bold text-[#1A2C42]" numberOfLines={1}>
+                            {index < existingVideoUrls.length ? `Existing video ${index + 1}` : newVideos[index - existingVideoUrls.length]?.fileName || `Selected video ${index + 1}`}
+                          </Text>
+                          <Text className="text-[11px] text-[#7C8B95] mt-0.5">
+                            {index < existingVideoUrls.length ? "Saved" : formatFileSize(newVideos[index - existingVideoUrls.length]?.fileSize)}
+                          </Text>
+                        </View>
                       <TouchableOpacity
                         onPress={() => {
                           if (index < existingVideoUrls.length) {
@@ -635,6 +897,7 @@ export default function CreateServicePage() {
                       >
                         <Ionicons name="close-circle" size={24} color="#94A3B8" />
                       </TouchableOpacity>
+                      </View>
                     </View>
                   ))}
                 </View>
