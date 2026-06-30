@@ -3,6 +3,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/src/components/UserAvatar";
+import { DeleteAccountButton } from "@/src/components/DeleteAccountButton";
 
 import { useRouter } from "expo-router";
 
@@ -161,6 +162,8 @@ export default function SettingsPage() {
                                 router.replace("/(auth)");
                             }}
                         />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <DeleteAccountButton />
                     </View>
                     <Text className="text-[#A0AEC0] text-[12px] font-bold text-center mt-6 tracking-widest">
                         APP VERSION 1.0.0

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Platform, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/src/components/UserAvatar";
+import { DeleteAccountButton } from "@/src/components/DeleteAccountButton";
 
 export default function ProviderSettings() {
     const router = useRouter();
@@ -131,6 +132,8 @@ export default function ProviderSettings() {
                             await logout();
                             router.replace("/(auth)");
                         }} />
+                        <View className="h-[1px] bg-gray-100 ml-14" />
+                        <DeleteAccountButton />
                     </View>
                 </View>
             </ScrollView>

@@ -633,6 +633,12 @@ export const apiSlice = createApi({
         body: payload,
       }),
     }),
+    deleteAccount: builder.mutation<ApiEnvelope<unknown>, void>({
+      query: () => ({
+        url: "/api/profile/me",
+        method: "DELETE",
+      }),
+    }),
     getSavedServices: builder.query<ApiEnvelope<{ items?: PublicServiceCard[] }>, void>({
       query: () => "/api/profile/me/saved-services",
       providesTags: ["Profile"],
@@ -891,6 +897,7 @@ export const {
   useUpdateProfileMutation,
   useUploadAvatarMutation,
   useChangePasswordMutation,
+  useDeleteAccountMutation,
   useGetSavedServicesQuery,
   useSaveServiceMutation,
   useRemoveSavedServiceMutation,
