@@ -68,6 +68,7 @@ export type PublicWebsiteReviewsResponse = {
       id?: string;
       name?: string;
       avatar?: string;
+      location?: string;
       sellerLevel?: string;
       providerRating?: number;
       monthlyIncome?: number;
@@ -81,6 +82,7 @@ export type PublicWebsiteReviewsResponse = {
       id?: string;
       name?: string;
       avatar?: string;
+      location?: string;
       monthlySpending?: number;
     };
   }[];

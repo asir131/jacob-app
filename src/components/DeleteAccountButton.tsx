@@ -85,7 +85,7 @@ export function DeleteAccountButton() {
               </View>
             ) : null}
 
-            <View className="mt-6 flex-row gap-3">
+            <View className="mt-6 flex-row" style={{ gap: 12 }}>
               <TouchableOpacity
                 disabled={isLoading}
                 onPress={close}
@@ -97,9 +97,13 @@ export function DeleteAccountButton() {
                 disabled={isLoading}
                 onPress={() => void handleDelete()}
                 className="h-14 flex-1 flex-row items-center justify-center rounded-2xl bg-red-500"
+                style={{ backgroundColor: "#EF4444" }}
               >
                 {isLoading ? <ActivityIndicator color="#FFFFFF" /> : null}
-                <Text className={`text-[15px] font-bold text-white ${isLoading ? "ml-2" : ""}`}>
+                <Text
+                  className={`text-[15px] font-bold ${isLoading ? "ml-2" : ""}`}
+                  style={{ color: "#FFFFFF" }}
+                >
                   {isLoading ? "Deleting..." : "Delete"}
                 </Text>
               </TouchableOpacity>

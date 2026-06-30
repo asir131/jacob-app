@@ -66,17 +66,30 @@ export default function RegisterScreen({ initialRole, lockRole = false }: Regist
         ? (error as { data?: { message?: string } }).data?.message
         : "";
 
+    const transportMessage =
+      typeof error === "object" && error !== null && "error" in error
+        ? String((error as { error?: unknown }).error || "")
+        : "";
+
     if (typeof apiMessage === "string" && apiMessage.toLowerCase().includes("email already")) {
       return "Email already in use";
     }
 
-    return "Signup failed.";
+    if (typeof apiMessage === "string" && apiMessage.trim()) {
+      return apiMessage;
+    }
+
+    if (transportMessage.toLowerCase().includes("network")) {
+      return "Could not reach the server. Make sure the backend and ngrok tunnel are running.";
+    }
+
+    return "Signup failed. Please try again.";
   };
 
   const handleSignUp = async () => {
     const [firstName, ...rest] = fullName.trim().split(" ").filter(Boolean);
-    if (!firstName || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert("Missing information", "Full name, email, password and confirm password are required.");
+    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
+      Alert.alert("Missing information", "Email, password and confirm password are required.");
       return;
     }
 
@@ -102,7 +115,7 @@ export default function RegisterScreen({ initialRole, lockRole = false }: Regist
 
     try {
       await signup({
-        firstName,
+        firstName: firstName || "",
         lastName: rest.join(" "),
         email: email.trim(),
         password,
@@ -171,7 +184,7 @@ export default function RegisterScreen({ initialRole, lockRole = false }: Regist
 
           <View className="gap-y-5">
             <View>
-              <Text className="text-[14px] font-bold text-[#A0AEC0] mb-2 ml-1">Full Name</Text>
+              <Text className="text-[14px] font-bold text-[#A0AEC0] mb-2 ml-1">Full Name (Optional)</Text>
               <View className="w-full h-[60px] border-2 border-[#A0AEC0] rounded-[24px] px-6 justify-center">
                 <TextInput
                   placeholder="Enter your full name"

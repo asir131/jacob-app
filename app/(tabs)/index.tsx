@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { WebView } from "react-native-webview";
 
 import { KeyboardAwareScrollView as ScrollView } from "@/src/components/KeyboardAwareScrollView";
+import { UserAvatar } from "@/src/components/UserAvatar";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useSocketNotifications } from "@/src/contexts/SocketContext";
 import { API_BASE_URL } from "@/src/lib/env";
@@ -16,6 +17,7 @@ import {
   useGetCategoriesQuery,
   useGetFaqsQuery,
   useGetPublicServicesQuery,
+  useGetPublicWebsiteReviewsQuery,
 } from "@/src/store/services/apiSlice";
 
 const normalizeMediaUrl = (url?: string) => {
@@ -39,21 +41,6 @@ const howItWorks = [
     icon: "shield-checkmark-outline",
     title: "Complete",
     body: "Track messages, deliveries, and revisions from one place with support when needed.",
-  },
-];
-
-const testimonials = [
-  {
-    id: "1",
-    name: "Maliha Rahman",
-    role: "Homeowner",
-    quote: "Booking help felt simple and safe. The provider arrived on time and the order flow stayed clear from start to finish.",
-  },
-  {
-    id: "2",
-    name: "Asif Hossain",
-    role: "Small Business Owner",
-    quote: "Jacob made it much easier to find reliable support near me without chasing random contacts.",
   },
 ];
 
@@ -120,6 +107,35 @@ export default function HomePage() {
     }
   );
   const { data: faqPayload } = useGetFaqsQuery();
+  const { data: websiteReviewsPayload, isFetching: loadingWebsiteReviews } =
+    useGetPublicWebsiteReviewsQuery();
+  const testimonials = useMemo(() => {
+    const customerReviews = (websiteReviewsPayload?.data?.clientReviews || []).map((review, index) => ({
+      id: review.id || `client-${index}`,
+      name: review.reviewer?.name || "Customer",
+      role: "Customer" as const,
+      city: review.reviewer?.location || "Location not provided",
+      avatar: review.reviewer?.avatar || "",
+      quote: review.reviewText || "Shared a website review.",
+      rating: Number(review.websiteRating || 0),
+      metricLabel: "Monthly Spending",
+      metricValue: `${formatCurrency(Number(review.reviewer?.monthlySpending || 0))} / month`,
+      badge: "",
+    }));
+    const providerReviews = (websiteReviewsPayload?.data?.providerReviews || []).map((review, index) => ({
+      id: review.id || `provider-${index}`,
+      name: review.reviewer?.name || "Provider",
+      role: "Provider" as const,
+      city: review.reviewer?.location || "Location not provided",
+      avatar: review.reviewer?.avatar || "",
+      quote: review.reviewText || "Shared a website review.",
+      rating: Number(review.websiteRating || 0),
+      metricLabel: "Monthly Earnings",
+      metricValue: `${formatCurrency(Number(review.reviewer?.monthlyIncome || 0))} / month`,
+      badge: review.reviewer?.sellerLevel || "New",
+    }));
+    return [...customerReviews, ...providerReviews];
+  }, [websiteReviewsPayload?.data?.clientReviews, websiteReviewsPayload?.data?.providerReviews]);
   const dashboard = dashboardPayload?.data;
   const activeOrders = Number(dashboard?.orders?.activeOrders || 0);
   const pendingOrders = Number(dashboard?.orders?.pendingOrders || 0);
@@ -674,25 +690,58 @@ export default function HomePage() {
             <View className="w-1.5 h-7 bg-[#2B84B1] rounded-full mr-3.5" />
             <Text className="text-[22px] font-bold text-[#1A2C42]">What People Say</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {testimonials.map((item) => (
-              <View
-                key={item.id}
-                className="w-[290px] mr-4 bg-white rounded-[28px] border border-gray-100 shadow-sm shadow-black/5 p-5"
-              >
-                <View className="flex-row items-center mb-4">
-                  <View className="w-12 h-12 rounded-full bg-[#EAF3FA] items-center justify-center mr-3">
-                    <Ionicons name="person" size={20} color="#2B84B1" />
+          {loadingWebsiteReviews && testimonials.length === 0 ? (
+            <View className="h-36 items-center justify-center rounded-[24px] bg-white">
+              <ActivityIndicator color="#2B84B1" />
+            </View>
+          ) : testimonials.length === 0 ? (
+            <View className="rounded-[24px] border border-gray-100 bg-white px-5 py-7">
+              <Text className="text-center text-[14px] font-medium text-[#7C8B95]">No website reviews yet.</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {testimonials.map((item) => (
+                <View
+                  key={`${item.role}-${item.id}`}
+                  className="w-[300px] mr-4 bg-white rounded-[28px] border border-gray-100 shadow-sm shadow-black/5 p-5"
+                >
+                  <View className="flex-row items-center mb-4">
+                    <UserAvatar uri={normalizeMediaUrl(item.avatar)} size={48} className="mr-3" />
+                    <View className="flex-1">
+                      <Text className="text-[16px] font-bold text-[#1A2C42]" numberOfLines={1}>{item.name}</Text>
+                      <Text className="text-[13px] font-semibold text-[#2B84B1]">{item.role}</Text>
+                      <Text className="text-[11px] text-[#94A3B8]" numberOfLines={1}>{item.city}</Text>
+                    </View>
+                    {item.badge ? (
+                      <View className="rounded-full bg-[#FFF7E6] px-2.5 py-1">
+                        <Text className="text-[10px] font-bold text-[#B7791F]">{item.badge}</Text>
+                      </View>
+                    ) : null}
                   </View>
-                  <View>
-                    <Text className="text-[16px] font-bold text-[#1A2C42]">{item.name}</Text>
-                    <Text className="text-[13px] text-[#7C8B95]">{item.role}</Text>
+
+                  <View className="mb-3 flex-row">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <Ionicons
+                        key={value}
+                        name={value <= Math.round(item.rating) ? "star" : "star-outline"}
+                        size={15}
+                        color={value <= Math.round(item.rating) ? "#F59E0B" : "#CBD5E1"}
+                      />
+                    ))}
+                  </View>
+
+                  <Text className="text-[15px] leading-[24px] text-[#5F7182]">“{item.quote}”</Text>
+
+                  <View className="mt-5 border-t border-gray-100 pt-4">
+                    <Text className="text-[10px] font-bold uppercase tracking-widest text-[#94A3B8]">
+                      {item.metricLabel}
+                    </Text>
+                    <Text className="mt-1 text-[15px] font-bold text-[#1A2C42]">{item.metricValue}</Text>
                   </View>
                 </View>
-                <Text className="text-[15px] leading-[24px] text-[#5F7182]">{item.quote}</Text>
-              </View>
-            ))}
-          </ScrollView>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         <View className="px-6 mb-10">
